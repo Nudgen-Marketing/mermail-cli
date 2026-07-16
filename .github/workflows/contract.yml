@@ -1,0 +1,21 @@
+name: Production contract
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+permissions:
+  contents: read
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run validate:openapi
+      - run: npm run validate:remote
+      - name: Ensure generation is reproducible
+        run: git diff --exit-code -- spec/openapi.json src/generated-schema.ts

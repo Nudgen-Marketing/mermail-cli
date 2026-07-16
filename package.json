@@ -2,31 +2,53 @@
   "name": "mermail-cli",
   "version": "0.1.0",
   "description": "Official command-line interface for the Mermail API and MCP server",
+  "keywords": ["mermail", "email", "ai-agent", "cli", "mcp"],
+  "repository": { "type": "git", "url": "git+https://github.com/Nudgen-Marketing/mermail-cli.git" },
+  "homepage": "https://docs.mermail.app/ai/cli",
+  "bugs": { "url": "https://github.com/Nudgen-Marketing/mermail-cli/issues" },
   "type": "module",
   "license": "MIT",
-  "bin": { "mermail": "dist/index.js" },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=22" },
+  "bin": {
+    "mermail": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
     "dev": "tsx src/index.ts",
+    "sync:openapi": "node --import tsx scripts/sync-openapi.ts",
+    "validate:openapi": "OPENAPI_SOURCE=spec/openapi.json node --import tsx scripts/sync-openapi.ts",
+    "validate:remote": "node --import tsx scripts/validate-remote.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test && npm run build && npm pack --dry-run --cache .cache/npm"
+    "check": "npm run validate:openapi && npm run typecheck && npm test && npm run build && npm pack --dry-run --cache .cache/npm"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.8.4",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.0",
+    "jmespath": "^0.16.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@types/jmespath": "^0.15.2",
     "@types/node": "^24.0.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   },
-  "overrides": { "esbuild": "^0.28.1" },
-  "publishConfig": { "access": "public", "provenance": true }
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

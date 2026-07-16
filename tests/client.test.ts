@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiRequest, CliError, resolveClientOptions } from "../src/client.js";
+import { apiRequest, CliError, resolveClientOptions, retryDelay } from "../src/client.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -19,6 +19,18 @@ describe("client", () => {
 
   it("rejects insecure non-local endpoints", () => {
     expect(() => resolveClientOptions({ baseUrl: "http://example.com" })).toThrow(CliError);
+  });
+
+  it("validates malformed URLs and timeout bounds", () => {
+    expect(() => resolveClientOptions({ baseUrl: "not a url" })).toThrow(CliError);
+    expect(() => resolveClientOptions({ timeout: "nope" })).toThrow(CliError);
+    expect(() => resolveClientOptions({ timeout: "99" })).toThrow(CliError);
+  });
+
+  it("parses Retry-After seconds and HTTP dates with a maximum delay", () => {
+    expect(retryDelay("2", 0, 0)).toBe(2000);
+    expect(retryDelay("Thu, 01 Jan 1970 00:00:05 GMT", 0, 0)).toBe(5000);
+    expect(retryDelay("999", 0, 0)).toBe(30000);
   });
 
   it("fails before the network when no API key exists", async () => {

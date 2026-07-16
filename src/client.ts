@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 export class CliError extends Error {
-  constructor(message: string, public readonly exitCode = 1, public readonly status?: number, public readonly code?: string, public readonly details?: unknown) {
+  constructor(message: string, public readonly exitCode = 1, public readonly status?: number, public readonly code?: string, public readonly details?: unknown, public readonly requestId?: string) {
     super(message);
   }
 }
@@ -11,9 +11,12 @@ export type ClientOptions = { apiKey?: string; baseUrl: string; timeout: number;
 export function resolveClientOptions(options: Record<string, unknown>): ClientOptions {
   const apiKey = String(options.apiKey || process.env.MERMAIL_API_KEY || "").trim() || undefined;
   const baseUrl = String(options.baseUrl || process.env.MERMAIL_BASE_URL || "https://console.mermail.app").replace(/\/+$/, "");
-  const url = new URL(baseUrl);
+  let url: URL;
+  try { url = new URL(baseUrl); } catch { throw new CliError("Base URL is not a valid URL", 2); }
   if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) throw new CliError("Base URL must use HTTPS except for localhost", 2);
-  return { apiKey, baseUrl, timeout: Number(options.timeout || 30_000), debug: Boolean(options.debug) };
+  const timeout = Number(options.timeout || 30_000);
+  if (!Number.isSafeInteger(timeout) || timeout < 100 || timeout > 300_000) throw new CliError("Timeout must be an integer between 100 and 300000 milliseconds", 2);
+  return { apiKey, baseUrl, timeout, debug: Boolean(options.debug) };
 }
 
 export async function apiRequest(client: ClientOptions, input: { method: string; path: string; query?: Record<string, string>; body?: unknown; idempotencyKey?: string }): Promise<{ data: unknown; response: Response }> {
@@ -30,8 +33,7 @@ export async function apiRequest(client: ClientOptions, input: { method: string;
       if (client.debug) process.stderr.write(`[debug] ${input.method} ${url.toString()}\n`);
       const response = await fetch(url, { method: input.method, headers, body: input.body === undefined ? undefined : JSON.stringify(input.body), signal: AbortSignal.timeout(client.timeout) });
       if ([408, 429, 502, 503, 504].includes(response.status) && attempt + 1 < attempts) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        await delay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 250 * 2 ** attempt + Math.random() * 100);
+        await delay(retryDelay(response.headers.get("retry-after"), attempt));
         continue;
       }
       const type = response.headers.get("content-type") ?? "";
@@ -39,7 +41,7 @@ export async function apiRequest(client: ClientOptions, input: { method: string;
       if (!response.ok) {
         const body = data as { error?: string; code?: string; message?: string; details?: unknown };
         const code = body.code ?? body.error;
-        throw new CliError(body.message ?? body.error ?? `HTTP ${response.status}`, response.status === 401 ? 3 : 1, response.status, code, body.details);
+        throw new CliError(body.message ?? body.error ?? `HTTP ${response.status}`, response.status === 401 ? 3 : 1, response.status, code, body.details, response.headers.get("x-request-id") ?? undefined);
       }
       return { data, response };
     } catch (error) {
@@ -49,6 +51,15 @@ export async function apiRequest(client: ClientOptions, input: { method: string;
     }
   }
   throw lastError;
+}
+
+export function retryDelay(header: string | null, attempt: number, now = Date.now()) {
+  if (header) {
+    const seconds = Number(header);
+    const value = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - now;
+    if (Number.isFinite(value) && value >= 0) return Math.min(value, 30_000);
+  }
+  return Math.min(250 * 2 ** attempt + Math.random() * 100, 30_000);
 }
 
 export async function mcpRequest(client: ClientOptions, body: unknown): Promise<any> {

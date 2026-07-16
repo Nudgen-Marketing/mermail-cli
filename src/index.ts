@@ -2,10 +2,14 @@
 import { readFile } from "node:fs/promises";
 import { confirm } from "@inquirer/prompts";
 import { Command, Option } from "commander";
+import jmespath from "jmespath";
 import { apiRequest, CliError, mcpRequest, resolveClientOptions } from "./client.js";
+import { operationSchemas } from "./generated-schema.js";
 import { operations, type Operation } from "./operations.js";
 import { printError, printOutput, type OutputFormat } from "./output.js";
 
+type GeneratedField = { readonly name: string; readonly type: string; readonly required: boolean; readonly description?: string; readonly values?: readonly unknown[] };
+const schemas = operationSchemas as Record<string, { readonly query: readonly GeneratedField[]; readonly body: readonly GeneratedField[] }>;
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 const program = new Command()
   .name("mermail")
@@ -13,8 +17,9 @@ const program = new Command()
   .version(packageJson.version)
   .option("--api-key <key>", "Mermail API key (prefer MERMAIL_API_KEY)")
   .option("--base-url <url>", "API base URL", process.env.MERMAIL_BASE_URL)
-  .addOption(new Option("--format <format>", "output format").choices(["json", "yaml", "pretty", "table", "raw"]).default(process.env.MERMAIL_FORMAT || "json"))
+  .addOption(new Option("--format <format>", "output format").choices(["json", "yaml", "pretty", "table", "raw", "explore"]).default(process.env.MERMAIL_FORMAT || "json"))
   .option("--timeout <ms>", "request timeout in milliseconds", "30000")
+  .option("--transform <expression>", "transform JSON output with JMESPath")
   .option("--debug", "print redacted request diagnostics");
 
 const groups = new Map<string, Command>();
@@ -29,17 +34,23 @@ for (const operation of operations) {
 
 function registerOperation(group: Command, operation: Operation) {
   const command = group.command(operation.action).description(`${operation.method} ${operation.path}`);
+  const schema = schemas[operation.tool]!;
+  const registered = new Set<string>();
   for (const param of operation.params ?? []) command.requiredOption(`--${kebab(param)} <value>`, `${param} path parameter`);
-  command
-    .option("--query <key=value>", "query parameter; repeatable", collect, [])
-    .option("--data <json>", "JSON request body")
-    .option("--data-file <path>", "JSON body file; use - for stdin")
-    .option("--idempotency-key <key>", "credit-ledger idempotency key")
-    .option("--output-file <path>", "write response to a file")
-    .option("--yes", "confirm destructive action for automation")
-    .option("--email <email>").option("--name <name>").option("--to <email...>").option("--from <email>")
-    .option("--subject <subject>").option("--text <text>").option("--html <html>").option("--permanent")
-    .action(async (local: Record<string, any>, current: Command) => runOperation(operation, local, current.optsWithGlobals()));
+  for (const param of operation.params ?? []) registered.add(param);
+  for (const field of schema.query) if (!registered.has(field.name)) {
+    command.addOption(fieldOption(field, "query"));
+    registered.add(field.name);
+  }
+  for (const field of schema.body) if (!registered.has(field.name)) {
+    command.addOption(fieldOption(field, "body"));
+    registered.add(field.name);
+  }
+  command.option("--query-param <key=value>", "additional query parameter; repeatable", collect, []);
+  if (!["GET", "DELETE"].includes(operation.method)) command.option("--data <json>", "JSON request body").option("--data-file <path>", "JSON body file; use - for stdin").option("--idempotency-key <key>", "credit-ledger idempotency key");
+  command.option("--output-file <path>", "write response to a file");
+  if (operation.destructive) command.option("--yes", "confirm destructive action for automation");
+  command.action(async (local: Record<string, any>, current: Command) => runOperation(operation, local, current.optsWithGlobals()));
 }
 
 program.command("doctor").description("Check runtime, configuration, and public discovery without spending API credits").action(async (_local: unknown, current: Command) => {
@@ -84,21 +95,23 @@ async function runOperation(operation: Operation, local: Record<string, any>, gl
   const client = resolveClientOptions(globals);
   let path = operation.path;
   for (const param of operation.params ?? []) path = path.replace(`{${param}}`, encodeURIComponent(String(local[param])));
-  const query = Object.fromEntries((local.query as string[]).map(parsePair));
-  if (local.permanent) query.permanent = "true";
-  const body = await bodyFrom(local, operation.method);
+  const query = Object.fromEntries((local.queryParam as string[]).map(parsePair));
+  for (const field of schemas[operation.tool]!.query) if (local[field.name] !== undefined) query[field.name] = String(local[field.name]);
+  const body = await bodyFrom(local, operation);
   const { data } = await apiRequest(client, { method: operation.method, path, query, body, idempotencyKey: local.idempotencyKey });
-  await printOutput(data, globals.format, local.outputFile);
+  const transformed = globals.transform ? transform(data, globals.transform) : data;
+  await printOutput(transformed, globals.format, local.outputFile);
 }
 
-async function bodyFrom(options: Record<string, any>, method: string) {
-  if (["GET", "DELETE"].includes(method)) return undefined;
+async function bodyFrom(options: Record<string, any>, operation: Operation) {
+  if (["GET", "DELETE"].includes(operation.method)) return undefined;
   if (options.data && options.dataFile) throw new CliError("Use only one of --data or --data-file", 2);
   let body: Record<string, unknown> = {};
   if (options.data) body = parseJson(options.data);
   if (options.dataFile) body = parseJson(options.dataFile === "-" ? await readStdin() : await readFile(options.dataFile, "utf8"));
-  for (const key of ["email", "name", "from", "subject", "text", "html"] as const) if (options[key] !== undefined) body[key] = options[key];
-  if (options.to !== undefined) body.to = options.to.length === 1 ? options.to[0] : options.to;
+  for (const field of schemas[operation.tool]!.body) if (options[field.name] !== undefined) body[field.name] = coerce(options[field.name], field.type);
+  const missing = schemas[operation.tool]!.body.filter((field) => field.required && body[field.name] === undefined).map((field) => field.name);
+  if (missing.length) throw new CliError(`Missing required body fields: ${missing.join(", ")}`, 2);
   return body;
 }
 
@@ -109,15 +122,34 @@ function parseJson(value: string): Record<string, unknown> {
 function collect(value: string, previous: string[]) { return [...previous, value]; }
 function parsePair(value: string): [string, string] { const index = value.indexOf("="); if (index < 1) throw new CliError(`Expected key=value, received ${value}`, 2); return [value.slice(0, index), value.slice(index + 1)]; }
 function kebab(value: string) { return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`); }
+function fieldOption(field: { name: string; type: string; required: boolean; description?: string; values?: readonly unknown[] }, location: string) {
+  const flag = `--${kebab(field.name)}`;
+  const syntax = field.type === "boolean" ? flag : `${flag} <value${field.type === "array" ? "..." : ""}>`;
+  const option = new Option(syntax, field.description || `${field.name} ${location} field`);
+  if (field.required && location === "query") option.makeOptionMandatory();
+  if (field.values?.length) option.choices(field.values.map(String));
+  return option;
+}
+function coerce(value: unknown, type: string): unknown {
+  if (type === "number" || type === "integer") { const number = Number(value); if (!Number.isFinite(number)) throw new CliError(`Expected a number, received ${value}`, 2); return number; }
+  if (type === "boolean") return Boolean(value);
+  if (type === "array") return (Array.isArray(value) ? value : [value]).map((entry) => parseJsonValue(entry));
+  if (type === "json") return parseJsonValue(value);
+  return value;
+}
+function parseJsonValue(value: unknown) { if (typeof value !== "string") return value; try { return JSON.parse(value); } catch { return value; } }
+function transform(value: unknown, expression: string) { try { return jmespath.search(value, expression); } catch (error) { throw new CliError(`Invalid JMESPath transform: ${error instanceof Error ? error.message : String(error)}`, 2); } }
 function outputFormat(command: Command): OutputFormat { return command.optsWithGlobals().format; }
 function initialize(id: number) { return { jsonrpc: "2.0", id, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "mermail-cli", version: packageJson.version } } }; }
 async function readStdin() { const chunks: Buffer[] = []; for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk)); return Buffer.concat(chunks).toString("utf8"); }
 function completionScript(shell: string) {
   const groups = [...new Set(operations.map((operation) => operation.group))];
   const root = [...groups, "doctor", "auth", "mcp", "completion", "help"].join(" ");
-  if (shell === "fish") return `complete -c mermail -f\ncomplete -c mermail -n '__fish_use_subcommand' -a '${root}'\n`;
-  if (shell === "zsh") return `#compdef mermail\n_arguments '1:command:(${root})' '*::arg:->args'\n`;
-  return `_mermail() { local cur; cur="\${COMP_WORDS[COMP_CWORD]}"; COMPREPLY=( $(compgen -W '${root}' -- "$cur") ); }\ncomplete -F _mermail mermail\n`;
+  const actions = Object.fromEntries(groups.map((group) => [group, operations.filter((operation) => operation.group === group).map((operation) => operation.action).join(" ")]));
+  if (shell === "fish") return `complete -c mermail -f\ncomplete -c mermail -n '__fish_use_subcommand' -a '${root}'\n${Object.entries(actions).map(([group, values]) => `complete -c mermail -n '__fish_seen_subcommand_from ${group}' -a '${values}'`).join("\n")}\n`;
+  if (shell === "zsh") return `#compdef mermail\nlocal -a commands\ncommands=(${root})\nif (( CURRENT == 2 )); then _describe command commands; return; fi\ncase $words[2] in\n${Object.entries(actions).map(([group, values]) => `  ${group}) _values action ${values} ;;`).join("\n")}\nesac\n`;
+  const cases = Object.entries(actions).map(([group, values]) => `${group}) words='${values}' ;;`).join(" ");
+  return `_mermail() { local cur words; cur="\${COMP_WORDS[COMP_CWORD]}"; if [[ $COMP_CWORD -eq 1 ]]; then words='${root}'; else case "\${COMP_WORDS[1]}" in ${cases} *) words='' ;; esac; fi; COMPREPLY=( $(compgen -W "$words" -- "$cur") ); }\ncomplete -F _mermail mermail\n`;
 }
 
 program.exitOverride();

@@ -28,7 +28,13 @@ mermail emails delete --mailbox-id agent@mermail.app --email-id MESSAGE_ID --per
 mermail mcp check
 ```
 
-JSON is the default output. Use `--format yaml`, `pretty`, `table`, or `raw`. Complex request bodies can be supplied with `--data`, `--data-file`, or `--data-file -` for stdin.
+JSON is the default output. Use `--format yaml`, `pretty`, `table`, `raw`, or the interactive `explore` view. Transform structured output with JMESPath:
+
+```bash
+mermail mailboxes list --transform '[].email'
+```
+
+Flags and validation are generated per operation from the checked-in OpenAPI contract. Complex request bodies can still be supplied with `--data`, `--data-file`, or `--data-file -` for stdin.
 
 ## Authentication
 
@@ -45,9 +51,10 @@ Destructive commands prompt in an interactive terminal and require `--yes` in no
 ```bash
 npm install
 npm run check
+npm run validate:remote
 ```
 
-The checked-in operation manifest intentionally exposes exactly 62 Sold API business operations. Console-only API-key administration is not available through project API keys.
+The checked-in operation manifest intentionally exposes exactly 62 Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares all 62 tool names with the production MCP server card. Console-only API-key administration is not available through project API keys.
 
 ## License
 
