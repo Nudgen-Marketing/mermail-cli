@@ -1,0 +1,76 @@
+export type Operation = {
+  tool: string;
+  group: string;
+  action: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  params?: string[];
+  destructive?: boolean;
+};
+
+const op = (tool: string, group: string, action: string, method: Operation["method"], path: string, params: string[] = [], destructive = false): Operation => ({ tool, group, action, method, path, params, destructive });
+
+export const operations: Operation[] = [
+  op("get_api_credit_usage", "usage", "credits", "GET", "/api/v1/workspaces/{workspaceId}/usage/credits", ["workspaceId"]),
+  op("get_email_usage", "usage", "email", "GET", "/api/v1/workspaces/{workspaceId}/usage/email", ["workspaceId"]),
+  op("list_workspaces", "workspaces", "list", "GET", "/api/v1/workspaces"),
+  op("get_workspace", "workspaces", "get", "GET", "/api/v1/workspaces/{workspaceId}", ["workspaceId"]),
+  op("update_workspace", "workspaces", "update", "PUT", "/api/v1/workspaces/{workspaceId}", ["workspaceId"]),
+  op("delete_workspace", "workspaces", "delete", "DELETE", "/api/v1/workspaces/{workspaceId}", ["workspaceId"], true),
+  op("get_workspace_storage", "workspaces", "storage", "GET", "/api/v1/workspaces/{workspaceId}/storage", ["workspaceId"]),
+  op("list_workspace_members", "members", "list", "GET", "/api/v1/workspaces/{workspaceId}/members", ["workspaceId"]),
+  op("update_member_role", "members", "update", "PUT", "/api/v1/workspaces/{workspaceId}/members/{memberId}", ["workspaceId", "memberId"]),
+  op("remove_workspace_member", "members", "remove", "DELETE", "/api/v1/workspaces/{workspaceId}/members/{memberId}", ["workspaceId", "memberId"], true),
+  op("invite_workspace_member", "invites", "create", "POST", "/api/v1/workspaces/{workspaceId}/invites", ["workspaceId"]),
+  op("resend_workspace_invite", "invites", "resend", "POST", "/api/v1/workspaces/{workspaceId}/invites/{inviteId}/resend", ["workspaceId", "inviteId"]),
+  op("list_email_domains", "domains", "list", "GET", "/api/v1/workspaces/{workspaceId}/email-domains", ["workspaceId"]),
+  op("add_email_domain", "domains", "add", "POST", "/api/v1/workspaces/{workspaceId}/email-domains", ["workspaceId"]),
+  op("delete_email_domain", "domains", "delete", "DELETE", "/api/v1/workspaces/{workspaceId}/email-domains/{domainId}", ["workspaceId", "domainId"], true),
+  op("verify_email_domain", "domains", "verify", "POST", "/api/v1/workspaces/{workspaceId}/email-domains/{domainId}/verify", ["workspaceId", "domainId"]),
+  op("list_workspace_mailboxes", "mailboxes", "list-workspace", "GET", "/api/v1/workspaces/{workspaceId}/mailboxes", ["workspaceId"]),
+  op("list_mailboxes", "mailboxes", "list", "GET", "/api/v1/mailboxes"),
+  op("create_mailbox", "mailboxes", "create", "POST", "/api/v1/mailboxes"),
+  op("get_mailbox", "mailboxes", "get", "GET", "/api/v1/mailboxes/{mailboxId}", ["mailboxId"]),
+  op("update_mailbox_settings", "mailboxes", "update", "PUT", "/api/v1/mailboxes/{mailboxId}", ["mailboxId"]),
+  op("get_mailbox_storage", "mailboxes", "storage", "GET", "/api/v1/mailboxes/{mailboxId}/storage", ["mailboxId"]),
+  op("list_emails", "emails", "list", "GET", "/api/v1/mailboxes/{mailboxId}/emails", ["mailboxId"]),
+  op("send_email", "emails", "send", "POST", "/api/v1/mailboxes/{mailboxId}/emails", ["mailboxId"]),
+  op("get_email", "emails", "get", "GET", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}", ["mailboxId", "emailId"]),
+  op("update_email", "emails", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}", ["mailboxId", "emailId"]),
+  op("delete_email", "emails", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}", ["mailboxId", "emailId"], true),
+  op("bulk_delete_emails", "emails", "bulk-delete", "POST", "/api/v1/mailboxes/{mailboxId}/emails/bulk-delete", ["mailboxId"], true),
+  op("bulk_mark_emails_read", "emails", "bulk-read", "POST", "/api/v1/mailboxes/{mailboxId}/emails/bulk-read", ["mailboxId"]),
+  op("bulk_move_emails", "emails", "bulk-move", "POST", "/api/v1/mailboxes/{mailboxId}/emails/bulk-move", ["mailboxId"]),
+  op("move_email", "emails", "move", "POST", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/move", ["mailboxId", "emailId"]),
+  op("reply_to_email", "emails", "reply", "POST", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/reply", ["mailboxId", "emailId"]),
+  op("forward_email", "emails", "forward", "POST", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/forward", ["mailboxId", "emailId"]),
+  op("download_attachment", "attachments", "download", "GET", "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/attachments/{attachmentId}", ["mailboxId", "emailId", "attachmentId"]),
+  op("save_draft", "drafts", "save", "POST", "/api/v1/mailboxes/{mailboxId}/drafts", ["mailboxId"]),
+  op("regenerate_draft", "drafts", "regenerate", "POST", "/api/v1/mailboxes/{mailboxId}/drafts/regenerate", ["mailboxId"]),
+  op("schedule_email_send", "scheduled-sends", "create", "POST", "/api/v1/mailboxes/{mailboxId}/scheduled-sends", ["mailboxId"]),
+  op("empty_trash", "trash", "empty", "POST", "/api/v1/mailboxes/{mailboxId}/trash/empty", ["mailboxId"], true),
+  op("get_thread", "threads", "get", "GET", "/api/v1/mailboxes/{mailboxId}/threads/{threadId}", ["mailboxId", "threadId"]),
+  op("mark_thread_read", "threads", "mark-read", "POST", "/api/v1/mailboxes/{mailboxId}/threads/{threadId}/read", ["mailboxId", "threadId"]),
+  op("list_folders", "folders", "list", "GET", "/api/v1/mailboxes/{mailboxId}/folders", ["mailboxId"]),
+  op("create_folder", "folders", "create", "POST", "/api/v1/mailboxes/{mailboxId}/folders", ["mailboxId"]),
+  op("update_folder", "folders", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/folders/{folderId}", ["mailboxId", "folderId"]),
+  op("delete_folder", "folders", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/folders/{folderId}", ["mailboxId", "folderId"], true),
+  op("search_emails", "emails", "search", "GET", "/api/v1/mailboxes/{mailboxId}/search", ["mailboxId"]),
+  op("list_custom_labels", "labels", "list", "GET", "/api/v1/mailboxes/{mailboxId}/custom-labels", ["mailboxId"]),
+  op("create_custom_label", "labels", "create", "POST", "/api/v1/mailboxes/{mailboxId}/custom-labels", ["mailboxId"]),
+  op("update_custom_label", "labels", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/custom-labels/{labelId}", ["mailboxId", "labelId"]),
+  op("delete_custom_label", "labels", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/custom-labels/{labelId}", ["mailboxId", "labelId"], true),
+  op("list_agent_conversations", "agent-conversations", "list", "GET", "/api/v1/mailboxes/{mailboxId}/agent-conversations", ["mailboxId"]),
+  op("create_agent_conversation", "agent-conversations", "create", "POST", "/api/v1/mailboxes/{mailboxId}/agent-conversations", ["mailboxId"]),
+  op("rename_agent_conversation", "agent-conversations", "rename", "PATCH", "/api/v1/mailboxes/{mailboxId}/agent-conversations/{conversationId}", ["mailboxId", "conversationId"]),
+  op("delete_agent_conversation", "agent-conversations", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/agent-conversations/{conversationId}", ["mailboxId", "conversationId"], true),
+  op("list_agent_messages", "agent-conversations", "messages", "GET", "/api/v1/mailboxes/{mailboxId}/agent-conversations/{conversationId}/messages", ["mailboxId", "conversationId"]),
+  op("chat_with_mailbox_agent", "agent", "chat", "POST", "/api/agent/mailbox"),
+  op("list_task_triagers", "triagers", "list", "GET", "/api/v1/mailboxes/{mailboxId}/task-triagers", ["mailboxId"]),
+  op("create_task_triager", "triagers", "create", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers", ["mailboxId"]),
+  op("list_recent_triager_runs", "triagers", "runs", "GET", "/api/v1/mailboxes/{mailboxId}/task-triager-runs/recent", ["mailboxId"]),
+  op("update_task_triager", "triagers", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}", ["mailboxId", "triagerId"]),
+  op("delete_task_triager", "triagers", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}", ["mailboxId", "triagerId"], true),
+  op("set_default_task_triager", "triagers", "set-default", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/default", ["mailboxId", "triagerId"]),
+  op("get_or_create_triager_conversation", "triagers", "conversation", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/agent-conversation", ["mailboxId", "triagerId"])
+];

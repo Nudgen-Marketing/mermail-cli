@@ -1,0 +1,31 @@
+{
+  "name": "mermail-cli",
+  "version": "0.1.0",
+  "description": "Official command-line interface for the Mermail API and MCP server",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "mermail": "dist/index.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test && npm run build && npm pack --dry-run --cache .cache/npm"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.8.4",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.0",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "publishConfig": { "access": "public", "provenance": true }
+}
