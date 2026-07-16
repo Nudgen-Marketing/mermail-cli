@@ -26,8 +26,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ inputs.version }}" -m "v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ inputs.version }}"; then
+            git fetch origin "refs/tags/v${{ inputs.version }}:refs/tags/v${{ inputs.version }}"
+            test "$(git show "v${{ inputs.version }}:package.json" | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s).version))")" = "${{ inputs.version }}"
+            git checkout --detach "v${{ inputs.version }}"
+          else
+            git tag -a "v${{ inputs.version }}" -m "v${{ inputs.version }}"
+            git push origin "v${{ inputs.version }}"
+          fi
       - run: npm publish --provenance --access public
       - env:
           GH_TOKEN: ${{ github.token }}
