@@ -55,8 +55,15 @@ function registerOperation(group: Command, operation: Operation) {
 
 program.command("doctor").description("Check runtime, configuration, and public discovery without spending API credits").action(async (_local: unknown, current: Command) => {
   const client = resolveClientOptions(current.optsWithGlobals());
-  const response = await fetch(`${client.baseUrl}/.well-known/mcp/server-card.json`, { signal: AbortSignal.timeout(client.timeout) });
-  await printOutput({ node: process.version, baseUrl: client.baseUrl, apiKey: client.apiKey ? "configured" : "missing", discovery: response.ok ? "ok" : `HTTP ${response.status}`, telemetry: "disabled" }, outputFormat(current));
+  let discovery = "ok";
+  try {
+    const response = await fetch(`${client.baseUrl}/.well-known/mcp/server-card.json`, { signal: AbortSignal.timeout(client.timeout) });
+    if (!response.ok) discovery = `HTTP ${response.status}`;
+  } catch (error) {
+    discovery = error instanceof Error ? error.message : "unreachable";
+  }
+  await printOutput({ node: process.version, baseUrl: client.baseUrl, apiKey: client.apiKey ? "configured" : "missing", discovery, telemetry: "disabled" }, outputFormat(current));
+  if (discovery !== "ok") throw new CliError(`MCP discovery failed: ${discovery}`, 1);
 });
 
 const auth = program.command("auth");
