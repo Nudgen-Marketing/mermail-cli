@@ -2872,6 +2872,7 @@
                 "example": [
                   {
                     "id": "support@mail.acme.com",
+                    "public_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                     "workspace_id": "ws_01abc",
                     "email": "support@mail.acme.com",
                     "name": "Acme Support",
@@ -3042,6 +3043,7 @@
                 "example": [
                   {
                     "id": "support@mail.acme.com",
+                    "public_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                     "workspace_id": "ws_01abc",
                     "email": "support@mail.acme.com",
                     "name": "Acme Support",
@@ -3195,6 +3197,7 @@
                 },
                 "example": {
                   "id": "support@mail.acme.com",
+                  "public_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                   "workspace_id": "ws_01abc",
                   "email": "ops@mail.acme.com",
                   "name": "Acme Ops",
@@ -3379,7 +3382,7 @@
     "/api/v1/mailboxes/{mailboxId}": {
       "get": {
         "summary": "Get mailbox",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nReturns a single mailbox by id (usually the email address). Does not include `inbox_unread_by_category` (use list endpoints for unread counts).\n\n**API credits:** 1 (read).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nReturns a single mailbox by `public_id` (UUID), hosted alias id, or current email. Does not include `inbox_unread_by_category` (use list endpoints for unread counts).\n\n**API credits:** 1 (read).",
         "tags": [
           "Mailboxes"
         ],
@@ -3393,11 +3396,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -3410,6 +3413,7 @@
                 },
                 "example": {
                   "id": "support@mail.acme.com",
+                  "public_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                   "workspace_id": "ws_01abc",
                   "email": "support@mail.acme.com",
                   "name": "Acme Support",
@@ -3563,11 +3567,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -3581,6 +3585,7 @@
                 },
                 "example": {
                   "id": "support@mail.acme.com",
+                  "public_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                   "workspace_id": "ws_01abc",
                   "email": "support@mail.acme.com",
                   "name": "Acme Support",
@@ -3783,11 +3788,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -3914,11 +3919,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "folder",
@@ -4184,11 +4189,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -4471,11 +4476,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -4637,11 +4642,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -4812,11 +4817,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -4957,11 +4962,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -5123,11 +5128,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -5287,11 +5292,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -5452,11 +5457,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -5613,11 +5618,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -5910,11 +5915,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -6194,11 +6199,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "emailId",
@@ -6353,11 +6358,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -6536,11 +6541,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -6699,11 +6704,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -6922,11 +6927,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -7051,11 +7056,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "threadId",
@@ -7211,11 +7216,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "threadId",
@@ -7350,11 +7355,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -7486,11 +7491,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -7635,11 +7640,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "folderId",
@@ -7793,11 +7798,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "folderId",
@@ -7928,11 +7933,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "query",
@@ -8199,11 +8204,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -8336,11 +8341,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -8510,11 +8515,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "labelId",
@@ -8681,11 +8686,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "labelId",
@@ -8816,11 +8821,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -8955,11 +8960,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -9119,11 +9124,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "conversationId",
@@ -9288,11 +9293,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "conversationId",
@@ -9423,11 +9428,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "conversationId",
@@ -9809,11 +9814,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -9940,11 +9945,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -10195,11 +10200,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "limit",
@@ -10346,11 +10351,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "triagerId",
@@ -10609,11 +10614,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "triagerId",
@@ -10744,11 +10749,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "triagerId",
@@ -10880,11 +10885,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           },
           {
             "name": "triagerId",
@@ -12397,11 +12402,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -12524,11 +12529,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -12650,11 +12655,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -12788,11 +12793,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -12917,11 +12922,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -13055,11 +13060,11 @@
             "name": "mailboxId",
             "in": "path",
             "required": true,
-            "description": "Mailbox id (email)",
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
             "schema": {
               "type": "string"
             },
-            "example": "support@mail.acme.com"
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           }
         ],
         "responses": {
@@ -14886,7 +14891,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Hosted alias primary key (also accepted as mailboxId)"
+          },
+          "public_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable public route id; preferred mailboxId for agents and clients"
           },
           "workspace_id": {
             "type": "string"

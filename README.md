@@ -16,25 +16,27 @@ Requires Node.js 22 or newer. After npm publish, `npm install -g mermail-cli` wi
 
 ## Examples
 
+`--mailbox-id` accepts `public_id` (UUID), hosted alias id, or current email — prefer `public_id` from `mermail mailboxes list`.
+
 ```bash
 mermail doctor
 mermail auth check
 mermail workspaces list
 mermail mailboxes list --format table
 mermail emails send \
-  --mailbox-id agent@mermail.app \
+  --mailbox-id MAILBOX_PUBLIC_ID \
   --to recipient@example.com \
   --from agent@mermail.app \
   --subject "Hello" \
   --text "Hello from Mermail"
-mermail emails delete --mailbox-id agent@mermail.app --email-id MESSAGE_ID --permanent --yes
+mermail emails delete --mailbox-id MAILBOX_PUBLIC_ID --email-id MESSAGE_ID --permanent --yes
 mermail mcp check
 ```
 
 JSON is the default output. Use `--format yaml`, `pretty`, `table`, `raw`, or the interactive `explore` view. Transform structured output with JMESPath:
 
 ```bash
-mermail mailboxes list --transform '[].email'
+mermail mailboxes list --transform '[].{email:email, public_id:public_id}'
 ```
 
 Flags and validation are generated per operation from the checked-in OpenAPI contract. Complex request bodies can still be supplied with `--data`, `--data-file`, or `--data-file -` for stdin.
