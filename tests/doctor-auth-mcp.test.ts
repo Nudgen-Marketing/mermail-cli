@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { operations } from "../src/operations.js";
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -20,14 +21,17 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(payload);
 }
 
-const tools = Array.from({ length: 63 }, (_, i) => ({
-  name: i === 0 ? "prepare_destructive_action" : `tool_${i}`,
-}));
+const tools = [
+  { name: "prepare_destructive_action" },
+  ...operations.map((operation) => ({ name: operation.tool })),
+  { name: "future_additive_tool" },
+];
 
 let baseUrl = "";
 let lastApiKey: string | null = null;
 let authMode: "ok" | "unauthorized" = "ok";
-let toolCount = 63;
+let omittedTool: string | undefined;
+let includeExtraTool = false;
 let cardStatus = 200;
 
 const server = createServer(async (req, res) => {
@@ -69,10 +73,13 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (body.method === "tools/list") {
+      const listedTools = tools.filter((tool) =>
+        tool.name !== omittedTool && (includeExtraTool || tool.name !== "future_additive_tool")
+      );
       sendJson(res, 200, {
         jsonrpc: "2.0",
         id: body.id,
-        result: { tools: tools.slice(0, toolCount) },
+        result: { tools: listedTools },
       });
       return;
     }
@@ -163,25 +170,30 @@ describe("CLI auth check", () => {
 });
 
 describe("CLI mcp check", () => {
-  it("requires exactly 63 tools", async () => {
-    toolCount = 63;
+  it("accepts the required tool set plus future additive tools", async () => {
+    omittedTool = undefined;
+    includeExtraTool = true;
     const result = await cli(
       ["mcp", "check", "--base-url", baseUrl, "--api-key", "sk-proj-test", "--format", "json"],
     );
     expect(result.status).toBe(0);
     const body = JSON.parse(result.stdout);
     expect(body.connected).toBe(true);
-    expect(body.tools).toBe(63);
+    expect(body.tools).toBe(64);
     expect(body.server.name).toBe("mermail");
+    includeExtraTool = false;
   });
 
-  it("fails when tool count mismatches", async () => {
-    toolCount = 10;
+  it("fails with a stable error when a required tool is missing", async () => {
+    omittedTool = "get_email";
     const result = await cli(
       ["mcp", "check", "--base-url", baseUrl, "--api-key", "sk-proj-test", "--format", "json"],
     );
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Expected 63 MCP tools");
-    toolCount = 63;
+    expect(JSON.parse(result.stderr).error).toMatchObject({
+      code: "mcp_missing_tools",
+      details: { missing: ["get_email"] },
+    });
+    omittedTool = undefined;
   });
 });

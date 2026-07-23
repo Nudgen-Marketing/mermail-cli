@@ -4,9 +4,13 @@ const baseUrl = (process.env.MERMAIL_BASE_URL ?? "https://console.mermail.app").
 const cardResponse = await fetch(`${baseUrl}/.well-known/mcp/server-card.json`);
 if (!cardResponse.ok) throw new Error(`Server card returned HTTP ${cardResponse.status}`);
 const card = await cardResponse.json() as any;
-const remote = (card.capabilities?.tools?.list ?? []).filter((name: string) => name !== "prepare_destructive_action").sort();
+const advertised = card.capabilities?.tools?.list;
+if (!Array.isArray(advertised)) throw new Error("Remote MCP server card has no tool list");
+const remote = advertised.filter((name: unknown): name is string => typeof name === "string");
 const local = operations.map((operation) => operation.tool).sort();
-if (JSON.stringify(remote) !== JSON.stringify(local)) throw new Error(`Remote MCP catalog drift: expected ${local.length}, found ${remote.length}`);
+const remoteNames = new Set(remote);
+const missing = local.filter((name) => !remoteNames.has(name));
+if (missing.length) throw new Error(`Remote MCP catalog is missing required tools: ${missing.join(", ")}`);
 
 const unauthenticated = await fetch(`${baseUrl}/mcp`, {
   method: "POST",
@@ -14,4 +18,4 @@ const unauthenticated = await fetch(`${baseUrl}/mcp`, {
   body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "mermail-cli-contract", version: "0.1.0" } } })
 });
 if (unauthenticated.status !== 401) throw new Error(`Unauthenticated MCP returned HTTP ${unauthenticated.status}, expected 401`);
-console.log(`Validated ${local.length} remote business tools and unauthenticated MCP rejection.`);
+console.log(`Validated ${local.length} required remote business tools (${remote.length} advertised tools) and unauthenticated MCP rejection.`);

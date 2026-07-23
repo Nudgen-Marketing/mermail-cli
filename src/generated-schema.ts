@@ -26,7 +26,10 @@ export const operationSchemas = {
       },
       {
         "name": "timezone",
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "required": false,
         "description": "IANA timezone, or null to clear"
       }
@@ -141,14 +144,14 @@ export const operationSchemas = {
       {
         "name": "workspaceId",
         "type": "string",
-        "required": true,
-        "description": "Required for `POST /api/v1/mailboxes`"
+        "required": false,
+        "description": "Optional for a workspace-bound API key or MCP OAuth grant. If supplied, it must match the credential workspace."
       },
       {
         "name": "settings",
         "type": "object",
         "required": false,
-        "description": "Optional mailbox settings merged over defaults"
+        "description": "Optional mailbox settings merged over defaults. For a verification-only inbox, set `agentInbox` to `{ \"mode\": \"verification\", \"automationsEnabled\": false }`."
       }
     ]
   },
@@ -220,6 +223,35 @@ export const operationSchemas = {
         "type": "string",
         "required": false,
         "description": "Set to true/1 to aggregate by thread"
+      },
+      {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit body, snippet, raw headers, and threat URLs from returned email items"
+      },
+      {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true only for a scoped verification flow that must inspect messages temporarily held for auto-draft processing"
+      },
+      {
+        "name": "require_scan_status",
+        "type": "string",
+        "required": false,
+        "description": "Require the exact stored scan status; non-matching messages are excluded",
+        "values": [
+          "clean",
+          "flagged",
+          "skipped"
+        ]
+      },
+      {
+        "name": "agent_safe_content",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
       },
       {
         "name": "page",
@@ -324,7 +356,43 @@ export const operationSchemas = {
     ]
   },
   "get_email": {
-    "query": [],
+    "query": [
+      {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit body, snippet, raw headers, and threat URLs"
+      },
+      {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true only for a scoped verification flow that must inspect a message temporarily held for auto-draft processing"
+      },
+      {
+        "name": "require_scan_status",
+        "type": "string",
+        "required": false,
+        "description": "Return the message only when its stored scan status exactly matches. A mismatch returns 404.",
+        "values": [
+          "clean",
+          "flagged",
+          "skipped"
+        ]
+      },
+      {
+        "name": "max_body_chars",
+        "type": "integer",
+        "required": false,
+        "description": "Positive character cap for the returned body without mutating the stored message. The effective server ceiling is 100000 characters."
+      },
+      {
+        "name": "agent_safe_content",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
+      }
+    ],
     "body": []
   },
   "update_email": {
@@ -773,6 +841,35 @@ export const operationSchemas = {
         "description": "Truthy to require attachments"
       },
       {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit body, snippet, raw headers, and threat URLs from candidates"
+      },
+      {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true only for a scoped verification flow that must inspect messages temporarily held for auto-draft processing"
+      },
+      {
+        "name": "require_scan_status",
+        "type": "string",
+        "required": false,
+        "description": "Require an exact scan status such as `clean`; non-matching messages are excluded",
+        "values": [
+          "clean",
+          "flagged",
+          "skipped"
+        ]
+      },
+      {
+        "name": "agent_safe_content",
+        "type": "boolean",
+        "required": false,
+        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
+      },
+      {
         "name": "page",
         "type": "integer",
         "required": false,
@@ -807,7 +904,10 @@ export const operationSchemas = {
       },
       {
         "name": "color",
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "required": false,
         "description": "Optional hex color"
       }
@@ -828,7 +928,10 @@ export const operationSchemas = {
       },
       {
         "name": "color",
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "required": false
       }
     ]
@@ -910,7 +1013,10 @@ export const operationSchemas = {
       },
       {
         "name": "thread_id",
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "required": false
       },
       {
