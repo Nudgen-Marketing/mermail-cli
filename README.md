@@ -45,6 +45,8 @@ Flags and validation are generated per operation from the checked-in OpenAPI con
 
 Use `MERMAIL_API_KEY` whenever possible. `--api-key` is supported for ephemeral automation but may be captured in shell history. The CLI never stores credentials and has no telemetry.
 
+**ChatGPT / Codex Official Plugins Directory** (when published) connects Mermail MCP with **OAuth Apps Connected** — no CLI key required there. This CLI always uses an API key against the Sold API / MCP probe endpoints.
+
 ```bash
 MERMAIL_BASE_URL=https://console-staging.mermail.app mermail mcp check
 ```
