@@ -42,5 +42,33 @@ describe("CLI process", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("workspaces");
     expect(result.stdout).toContain("bulk-delete");
+    expect(result.stdout).toContain("wait");
+  });
+
+  it("documents the additive verification-email wait command", () => {
+    const result = cli(["emails", "wait", "--help"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("--mailbox-id");
+    expect(result.stdout).toContain("--subject");
+    expect(result.stdout).toContain("--after");
+    expect(result.stdout.replace(/\s+/g, " ")).toContain('default: "30000"');
+    expect(result.stdout).toContain("At least one semantic filter");
+  });
+
+  it("requires a semantic email filter before waiting or networking", () => {
+    const result = cli(["emails", "wait", "--mailbox-id", "box@example.com", "--api-key", "sk-proj-test"]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("requires at least one semantic filter");
+  });
+
+  it("does not accept --after alone as a semantic email filter", () => {
+    const result = cli([
+      "emails", "wait",
+      "--mailbox-id", "box@example.com",
+      "--after", "2026-07-23T09:55:00Z",
+      "--api-key", "sk-proj-test",
+    ]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("--query, --from, or --subject");
   });
 });

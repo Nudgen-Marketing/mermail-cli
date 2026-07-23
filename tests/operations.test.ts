@@ -30,4 +30,13 @@ describe("operation manifest", () => {
     expect(operationSchemas.list_emails.query.map((field) => field.name)).toContain("category");
     expect(operationSchemas.list_workspaces.body).toEqual([]);
   });
+
+  it("keeps the mailbox-first primitives aligned with the MCP operation names", () => {
+    expect(operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tool: "list_mailboxes", group: "mailboxes", action: "list", method: "GET" }),
+      expect.objectContaining({ tool: "create_mailbox", group: "mailboxes", action: "create", method: "POST" }),
+      expect.objectContaining({ tool: "search_emails", group: "emails", action: "search", method: "GET" }),
+      expect.objectContaining({ tool: "get_email", group: "emails", action: "get", method: "GET" }),
+    ]));
+  });
 });
