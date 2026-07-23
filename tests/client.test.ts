@@ -23,14 +23,15 @@ describe("client", () => {
 
   it("validates malformed URLs and timeout bounds", () => {
     expect(() => resolveClientOptions({ baseUrl: "not a url" })).toThrow(CliError);
+    expect(() => resolveClientOptions({ baseUrl: "https://user:secret@example.com" })).toThrow(CliError);
     expect(() => resolveClientOptions({ timeout: "nope" })).toThrow(CliError);
     expect(() => resolveClientOptions({ timeout: "99" })).toThrow(CliError);
   });
 
-  it("parses Retry-After seconds and HTTP dates with a maximum delay", () => {
+  it("parses the full Retry-After value so callers can compare it with their budget", () => {
     expect(retryDelay("2", 0, 0)).toBe(2000);
     expect(retryDelay("Thu, 01 Jan 1970 00:00:05 GMT", 0, 0)).toBe(5000);
-    expect(retryDelay("999", 0, 0)).toBe(30000);
+    expect(retryDelay("999", 0, 0)).toBe(999000);
   });
 
   it("fails before the network when no API key exists", async () => {
@@ -38,15 +39,51 @@ describe("client", () => {
     await expect(apiRequest(resolveClientOptions({}), { method: "GET", path: "/api/v1/workspaces" })).rejects.toMatchObject({ exitCode: 3 });
   });
 
-  it("sends x-api-key without logging its value", async () => {
+  it("sends x-api-key without logging credentials, path identifiers, or query values", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
     const client = resolveClientOptions({ apiKey: "sk-proj-secret", debug: true });
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    await apiRequest(client, { method: "GET", path: "/api/v1/workspaces" });
+    await apiRequest(client, {
+      method: "GET",
+      path: "/api/v1/mailboxes/private-agent@example.com/search",
+      query: { subject: "secret-code-123" },
+    });
     expect(fetchMock.mock.calls[0]?.[1]?.headers["x-api-key"]).toBe("sk-proj-secret");
-    expect(stderr.mock.calls.flat().join(" ")).not.toContain("sk-proj-secret");
+    const debug = stderr.mock.calls.flat().join(" ");
+    expect(debug).not.toContain("sk-proj-secret");
+    expect(debug).not.toContain("private-agent@example.com");
+    expect(debug).not.toContain("secret-code-123");
+    expect(debug).toContain("queryParameters=1");
     stderr.mockRestore();
+  });
+
+  it("does not retry past the request budget and surfaces Retry-After", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(
+      { error: "Too many requests", code: "rate_limited" },
+      { status: 429, headers: { "retry-after": "120" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiRequest(
+      resolveClientOptions({ apiKey: "sk-proj-test", timeout: "30000" }),
+      { method: "GET", path: "/api/v1/workspaces" },
+    )).rejects.toMatchObject({
+      status: 429,
+      code: "rate_limited",
+      retryAfterMs: 120_000,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes malformed JSON responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })));
+    await expect(apiRequest(
+      resolveClientOptions({ apiKey: "sk-proj-test" }),
+      { method: "GET", path: "/api/v1/workspaces" },
+    )).rejects.toMatchObject({ code: "invalid_response", status: 200 });
   });
 
   it("normalizes authentication errors", async () => {

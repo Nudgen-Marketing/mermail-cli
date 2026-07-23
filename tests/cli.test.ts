@@ -43,6 +43,7 @@ describe("CLI process", () => {
     expect(result.stdout).toContain("workspaces");
     expect(result.stdout).toContain("bulk-delete");
     expect(result.stdout).toContain("wait");
+    expect(result.stdout).toContain("ensure");
   });
 
   it("documents the additive verification-email wait command", () => {
@@ -50,9 +51,51 @@ describe("CLI process", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--mailbox-id");
     expect(result.stdout).toContain("--subject");
+    expect(result.stdout).toContain("--from-exact");
+    expect(result.stdout).toContain("--to-exact");
+    expect(result.stdout).toContain("--require-single-match");
+    expect(result.stdout).toContain("--metadata-only");
     expect(result.stdout).toContain("--after");
+    expect(result.stdout).toContain("--exclude-email-id");
     expect(result.stdout.replace(/\s+/g, " ")).toContain('default: "30000"');
     expect(result.stdout).toContain("At least one semantic filter");
+  });
+
+  it("exposes held-mail and metadata controls on direct list/search/get commands", () => {
+    const list = cli(["emails", "list", "--help"]);
+    const search = cli(["emails", "search", "--help"]);
+    const get = cli(["emails", "get", "--help"]);
+    expect(list.status).toBe(0);
+    expect(list.stdout).toContain("--include-held");
+    expect(list.stdout).toContain("--include_held");
+    expect(list.stdout).toContain("--metadata-only");
+    expect(list.stdout).toContain("--metadata_only");
+    expect(list.stdout).toContain("--require-scan-status");
+    expect(list.stdout).toContain("--agent-safe-content");
+    expect(search.status).toBe(0);
+    expect(search.stdout).toContain("--require-scan-status");
+    expect(search.stdout).toContain("--require_scan_status");
+    expect(search.stdout).toContain("--include-held");
+    expect(search.stdout).toContain("--metadata-only");
+    expect(search.stdout).toContain("--agent-safe-content");
+    expect(get.status).toBe(0);
+    expect(get.stdout).toContain("--include-held");
+    expect(get.stdout).toContain("--metadata-only");
+    expect(get.stdout).toContain("--require-scan-status");
+    expect(get.stdout).toContain("--max-body-chars");
+    expect(get.stdout).toContain("--agent-safe-content");
+  });
+
+  it("rejects an empty repeated baseline email id before networking", () => {
+    const result = cli([
+      "emails", "wait",
+      "--mailbox-id", "box@example.com",
+      "--subject", "Verify",
+      "--exclude-email-id", "",
+      "--api-key", "sk-proj-test",
+    ]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("--exclude-email-id");
   });
 
   it("requires a semantic email filter before waiting or networking", () => {
@@ -69,6 +112,52 @@ describe("CLI process", () => {
       "--api-key", "sk-proj-test",
     ]);
     expect(result.status).toBe(2);
-    expect(JSON.parse(result.stderr).error.message).toContain("--query, --from, or --subject");
+    expect(JSON.parse(result.stderr).error.message).toContain("--from-exact");
+  });
+
+  it("requires an RFC3339 timezone for the safe after boundary", () => {
+    const result = cli([
+      "emails", "wait",
+      "--mailbox-id", "box@example.com",
+      "--subject", "Verify",
+      "--after", "2026-07-23T09:55:00",
+      "--api-key", "sk-proj-test",
+    ]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("RFC3339");
+  });
+
+  it("rejects an impossible RFC3339 calendar date", () => {
+    const result = cli([
+      "emails", "wait",
+      "--mailbox-id", "box@example.com",
+      "--subject", "Verify",
+      "--after", "2026-02-31T09:55:00Z",
+      "--api-key", "sk-proj-test",
+    ]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("valid RFC3339");
+  });
+
+  it("documents mailbox ensure without making workspace-id mandatory", () => {
+    const result = cli(["mailboxes", "ensure", "--help"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("--email");
+    expect(result.stdout).toContain("--name");
+    expect(result.stdout).toContain("--workspace-id");
+    expect(result.stdout).toContain("--verification-mode");
+    expect(result.stdout).not.toContain("requiredOption");
+  });
+
+  it("parses object-valued mailbox settings and rejects malformed JSON before networking", () => {
+    const result = cli([
+      "mailboxes", "create",
+      "--email", "agent@mermail.app",
+      "--name", "Agent",
+      "--settings", "not-json",
+      "--api-key", "sk-proj-test",
+    ]);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("JSON object");
   });
 });
