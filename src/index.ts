@@ -17,6 +17,19 @@ import {
 type GeneratedField = { readonly name: string; readonly type: string; readonly required: boolean; readonly description?: string; readonly values?: readonly unknown[] };
 const schemas = operationSchemas as Record<string, { readonly query: readonly GeneratedField[]; readonly body: readonly GeneratedField[] }>;
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+const agentInboxMcpTools = [
+  "get_api_credit_usage",
+  "list_workspaces",
+  "get_workspace",
+  "list_email_domains",
+  "list_workspace_mailboxes",
+  "list_mailboxes",
+  "create_mailbox",
+  "get_mailbox",
+  "list_emails",
+  "search_emails",
+  "get_email",
+] as const;
 const program = new Command()
   .name("mermail")
   .description("Official CLI for Mermail Sold API, MCP, and agent workflows")
@@ -150,13 +163,41 @@ function registerOperation(group: Command, operation: Operation) {
 program.command("doctor").description("Check runtime, configuration, and public discovery without spending API credits").action(async (_local: unknown, current: Command) => {
   const client = resolveClientOptions(current.optsWithGlobals());
   let discovery = "ok";
+  let toolCount: number | undefined;
+  let hasListEmails: boolean | undefined;
+  let authModes: string[] | undefined;
   try {
     const response = await fetch(`${client.baseUrl}/.well-known/mcp/server-card.json`, { signal: AbortSignal.timeout(client.timeout) });
-    if (!response.ok) discovery = `HTTP ${response.status}`;
+    if (!response.ok) {
+      discovery = `HTTP ${response.status}`;
+    } else {
+      const card = await response.json();
+      if (!isRecord(card)) throw new Error("invalid MCP server card");
+      const capabilities = isRecord(card.capabilities) ? card.capabilities : {};
+      const toolsCapability = isRecord(capabilities.tools) ? capabilities.tools : {};
+      const advertised = toolsCapability.list;
+      if (!Array.isArray(advertised) || advertised.some((name) => typeof name !== "string")) {
+        throw new Error("invalid MCP server card tool catalog");
+      }
+      const authentication = card.authentication;
+      if (!Array.isArray(authentication)) throw new Error("invalid MCP server card authentication catalog");
+      toolCount = advertised.length;
+      hasListEmails = advertised.includes("list_emails");
+      authModes = [...new Set(authentication.flatMap((entry) =>
+        isRecord(entry) && typeof entry.type === "string" ? [entry.type] : []
+      ))];
+    }
   } catch (error) {
     discovery = error instanceof Error ? error.message : "unreachable";
   }
-  await printOutput({ node: process.version, baseUrl: client.baseUrl, apiKey: client.apiKey ? "configured" : "missing", discovery, telemetry: "disabled" }, outputFormat(current));
+  await printOutput({
+    node: process.version,
+    baseUrl: client.baseUrl,
+    apiKey: client.apiKey ? "configured" : "missing",
+    discovery,
+    ...(toolCount === undefined ? {} : { toolCount, hasListEmails, authModes }),
+    telemetry: "disabled",
+  }, outputFormat(current));
   if (discovery !== "ok") throw new CliError(`MCP discovery failed: ${discovery}`, 1);
 });
 
@@ -168,21 +209,48 @@ auth.command("check").description("Validate the API key (consumes one read credi
 });
 
 const mcp = program.command("mcp");
-mcp.command("check").description("Initialize MCP and require the supported tool set (additional tools are allowed)").action(async (_local: unknown, current: Command) => {
-  const client = resolveClientOptions(current.optsWithGlobals());
-  const init = await mcpRequest(client, initialize(1));
-  const listed = await mcpRequest(client, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-  const tools = listed.result?.tools;
-  if (!Array.isArray(tools) || tools.some((tool) => !tool || typeof tool.name !== "string")) {
-    throw new CliError("MCP tools/list returned an invalid response", 1, 502, "mcp_invalid_response");
-  }
-  const names = new Set(tools.map((tool: { name: string }) => tool.name));
-  const required = ["prepare_destructive_action", ...operations.map((operation) => operation.tool)];
-  const missing = required.filter((name) => !names.has(name));
-  if (missing.length) throw new CliError(`MCP is missing required tools: ${missing.join(", ")}`, 1, 502, "mcp_missing_tools", { missing });
-  const count = tools.length;
-  await printOutput({ connected: true, server: init.result.serverInfo, tools: count }, outputFormat(current));
-});
+mcp.command("check")
+  .description("Initialize MCP and require the supported tool set (additional tools are allowed)")
+  .addOption(new Option("--profile <profile>", "check an opt-in MCP tool profile").choices(["agent-inbox"]))
+  .action(async (local: { profile?: string }, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const init = await mcpRequest(client, initialize(1), { profile: local.profile });
+    const listed = await mcpRequest(
+      client,
+      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+      { profile: local.profile },
+    );
+    const tools = listed.result?.tools;
+    if (!Array.isArray(tools) || tools.some((tool) => !tool || typeof tool.name !== "string")) {
+      throw new CliError("MCP tools/list returned an invalid response", 1, 502, "mcp_invalid_response");
+    }
+    const names = new Set(tools.map((tool: { name: string }) => tool.name));
+    const required = local.profile === "agent-inbox"
+      ? [...agentInboxMcpTools]
+      : ["prepare_destructive_action", ...operations.map((operation) => operation.tool)];
+    const missing = required.filter((name) => !names.has(name));
+    if (missing.length) throw new CliError(`MCP is missing required tools: ${missing.join(", ")}`, 1, 502, "mcp_missing_tools", { missing });
+    if (local.profile === "agent-inbox" && (tools.length !== required.length || names.size !== required.length)) {
+      const expected = new Set<string>(required);
+      const unexpected = [...names].filter((name) => !expected.has(name));
+      throw new CliError(
+        "MCP agent-inbox profile does not match its least-privilege tool set",
+        1,
+        502,
+        "mcp_profile_mismatch",
+        { expected: required.length, discovered: tools.length, unexpected },
+      );
+    }
+    requireListEmailsCanary(tools);
+    const count = tools.length;
+    await printOutput({
+      connected: true,
+      server: init.result.serverInfo,
+      tools: count,
+      profile: local.profile ?? "full",
+      listEmailsSchema: "compatible",
+    }, outputFormat(current));
+  });
 mcp.command("tools").description("List MCP tools").action(async (_local: unknown, current: Command) => {
   const client = resolveClientOptions(current.optsWithGlobals());
   const listed = await mcpRequest(client, { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
@@ -304,7 +372,41 @@ function coerce(value: unknown, type: string): unknown {
 function parseJsonValue(value: unknown) { if (typeof value !== "string") return value; try { return JSON.parse(value); } catch { return value; } }
 function transform(value: unknown, expression: string) { try { return jmespath.search(value, expression); } catch (error) { throw new CliError(`Invalid JMESPath transform: ${error instanceof Error ? error.message : String(error)}`, 2); } }
 function outputFormat(command: Command): OutputFormat { return command.optsWithGlobals().format; }
+function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function initialize(id: number) { return { jsonrpc: "2.0", id, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "mermail-cli", version: packageJson.version } } }; }
+function requireListEmailsCanary(tools: unknown[]) {
+  const listEmails = tools.find((tool) => isRecord(tool) && tool.name === "list_emails");
+  const inputSchema = isRecord(listEmails) && isRecord(listEmails.inputSchema) ? listEmails.inputSchema : undefined;
+  const inputProperties = inputSchema ? schemaObjectProperties(inputSchema) : undefined;
+  const querySchema = inputProperties && isRecord(inputProperties.query) ? inputProperties.query : undefined;
+  const queryProperties = querySchema ? schemaObjectProperties(querySchema) : undefined;
+  const requiredQueryFields = ["folder", "sortColumn", "sortDirection"];
+  const missing = requiredQueryFields.filter((field) => !queryProperties || !(field in queryProperties));
+  if (!inputSchema || !queryProperties || missing.length) {
+    throw new CliError(
+      "MCP list_emails input schema is incompatible: query must be an object with folder, sortColumn, and sortDirection",
+      1,
+      502,
+      "mcp_incompatible_tool_schema",
+      { tool: "list_emails", missing },
+    );
+  }
+}
+function schemaObjectProperties(schema: Record<string, unknown>): Record<string, unknown> | undefined {
+  if ((schema.type === "object" || schema.type === undefined) && isRecord(schema.properties)) {
+    return schema.properties;
+  }
+  for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
+    const alternatives = schema[keyword];
+    if (!Array.isArray(alternatives)) continue;
+    for (const alternative of alternatives) {
+      if (!isRecord(alternative)) continue;
+      const properties = schemaObjectProperties(alternative);
+      if (properties) return properties;
+    }
+  }
+  return undefined;
+}
 async function readStdin() { const chunks: Buffer[] = []; for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk)); return Buffer.concat(chunks).toString("utf8"); }
 function completionScript(shell: string) {
   const groups = [...new Set(operations.map((operation) => operation.group))];

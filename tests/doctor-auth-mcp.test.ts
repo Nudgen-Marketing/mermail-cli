@@ -21,18 +21,54 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(payload);
 }
 
+const listEmailsInputSchema = {
+  type: "object",
+  properties: {
+    mailboxId: { type: "string" },
+    query: {
+      type: "object",
+      properties: {
+        folder: { type: ["string", "null"] },
+        sortColumn: { type: ["string", "null"] },
+        sortDirection: { type: ["string", "null"] },
+      },
+    },
+  },
+};
 const tools = [
-  { name: "prepare_destructive_action" },
-  ...operations.map((operation) => ({ name: operation.tool })),
-  { name: "future_additive_tool" },
-];
+  "prepare_destructive_action",
+  ...operations.map((operation) => operation.tool),
+  "future_additive_tool",
+].map((name) => ({
+  name,
+  inputSchema: name === "list_emails"
+    ? listEmailsInputSchema
+    : { type: "object", properties: {} },
+}));
+const agentInboxTools = new Set([
+  "get_api_credit_usage",
+  "list_workspaces",
+  "get_workspace",
+  "list_email_domains",
+  "list_workspace_mailboxes",
+  "list_mailboxes",
+  "create_mailbox",
+  "get_mailbox",
+  "list_emails",
+  "search_emails",
+  "get_email",
+]);
 
 let baseUrl = "";
 let lastApiKey: string | null = null;
+let lastMcpProfile: string | null = null;
 let authMode: "ok" | "unauthorized" = "ok";
 let omittedTool: string | undefined;
 let includeExtraTool = false;
+let includeUnexpectedProfileTool = false;
+let incompatibleListEmailsSchema = false;
 let cardStatus = 200;
+let cardMode: "valid" | "invalid" = "valid";
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -43,10 +79,17 @@ const server = createServer(async (req, res) => {
       sendJson(res, cardStatus, { error: "unavailable" });
       return;
     }
+    if (cardMode === "invalid") {
+      sendJson(res, 200, { serverInfo: { name: "Mermail MCP" } });
+      return;
+    }
     sendJson(res, 200, {
       serverInfo: { name: "Mermail MCP", version: "1.0.0" },
       transport: { protocol: "streamable-http", endpoint: `${baseUrl}/mcp` },
-      authentication: [{ type: "api-key", header: "x-api-key", prefix: "sk-proj-" }],
+      authentication: [
+        { type: "oauth2", authorization_servers: [baseUrl] },
+        { type: "api-key", header: "x-api-key", prefix: "sk-proj-" },
+      ],
       capabilities: { tools: { list: tools.map((t) => t.name) } },
     });
     return;
@@ -62,6 +105,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/mcp" && req.method === "POST") {
+    lastMcpProfile = url.searchParams.get("profile");
     const raw = await readBody(req);
     const body = JSON.parse(raw) as { id: number; method: string };
     if (body.method === "initialize") {
@@ -74,8 +118,25 @@ const server = createServer(async (req, res) => {
     }
     if (body.method === "tools/list") {
       const listedTools = tools.filter((tool) =>
-        tool.name !== omittedTool && (includeExtraTool || tool.name !== "future_additive_tool")
-      );
+        tool.name !== omittedTool
+        && (includeExtraTool || tool.name !== "future_additive_tool")
+        && (
+          lastMcpProfile !== "agent-inbox"
+          || agentInboxTools.has(tool.name)
+          || (includeUnexpectedProfileTool && tool.name === "future_additive_tool")
+        )
+      ).map((tool) => incompatibleListEmailsSchema && tool.name === "list_emails"
+        ? {
+            ...tool,
+            inputSchema: {
+              type: "object",
+              properties: {
+                mailboxId: { type: "string" },
+                query: { type: "string" },
+              },
+            },
+          }
+        : tool);
       sendJson(res, 200, {
         jsonrpc: "2.0",
         id: body.id,
@@ -134,6 +195,9 @@ describe("CLI doctor", () => {
     expect(body.discovery).toBe("ok");
     expect(body.apiKey).toBe("missing");
     expect(body.baseUrl).toBe(baseUrl);
+    expect(body.toolCount).toBe(64);
+    expect(body.hasListEmails).toBe(true);
+    expect(body.authModes).toEqual(["oauth2", "api-key"]);
     expect(body.telemetry).toBe("disabled");
   });
 
@@ -142,6 +206,14 @@ describe("CLI doctor", () => {
     const result = await cli(["doctor", "--base-url", baseUrl, "--format", "json"]);
     expect(result.status).not.toBe(0);
     cardStatus = 200;
+  });
+
+  it("fails when the discovery card cannot be parsed as an MCP catalog", async () => {
+    cardMode = "invalid";
+    const result = await cli(["doctor", "--base-url", baseUrl, "--format", "json"]);
+    expect(result.status).not.toBe(0);
+    expect(JSON.parse(result.stderr).error.message).toContain("invalid MCP server card");
+    cardMode = "valid";
   });
 });
 
@@ -181,7 +253,43 @@ describe("CLI mcp check", () => {
     expect(body.connected).toBe(true);
     expect(body.tools).toBe(64);
     expect(body.server.name).toBe("mermail");
+    expect(body.profile).toBe("full");
+    expect(body.listEmailsSchema).toBe("compatible");
     includeExtraTool = false;
+  });
+
+  it("checks the additive agent-inbox profile without requiring the full catalog", async () => {
+    const result = await cli(
+      ["mcp", "check", "--profile", "agent-inbox", "--base-url", baseUrl, "--api-key", "sk-proj-test", "--format", "json"],
+    );
+    expect(result.status).toBe(0);
+    const body = JSON.parse(result.stdout);
+    expect(lastMcpProfile).toBe("agent-inbox");
+    expect(body).toMatchObject({
+      connected: true,
+      tools: 11,
+      profile: "agent-inbox",
+      listEmailsSchema: "compatible",
+    });
+  });
+
+  it("rejects unexpected tools in the least-privilege agent-inbox profile", async () => {
+    includeExtraTool = true;
+    includeUnexpectedProfileTool = true;
+    const result = await cli(
+      ["mcp", "check", "--profile", "agent-inbox", "--base-url", baseUrl, "--api-key", "sk-proj-test", "--format", "json"],
+    );
+    expect(result.status).not.toBe(0);
+    expect(JSON.parse(result.stderr).error).toMatchObject({
+      code: "mcp_profile_mismatch",
+      details: {
+        expected: 11,
+        discovered: 12,
+        unexpected: ["future_additive_tool"],
+      },
+    });
+    includeExtraTool = false;
+    includeUnexpectedProfileTool = false;
   });
 
   it("fails with a stable error when a required tool is missing", async () => {
@@ -195,5 +303,21 @@ describe("CLI mcp check", () => {
       details: { missing: ["get_email"] },
     });
     omittedTool = undefined;
+  });
+
+  it("fails when list_emails query is not a structured compatible object", async () => {
+    incompatibleListEmailsSchema = true;
+    const result = await cli(
+      ["mcp", "check", "--base-url", baseUrl, "--api-key", "sk-proj-test", "--format", "json"],
+    );
+    expect(result.status).not.toBe(0);
+    expect(JSON.parse(result.stderr).error).toMatchObject({
+      code: "mcp_incompatible_tool_schema",
+      details: {
+        tool: "list_emails",
+        missing: ["folder", "sortColumn", "sortDirection"],
+      },
+    });
+    incompatibleListEmailsSchema = false;
   });
 });

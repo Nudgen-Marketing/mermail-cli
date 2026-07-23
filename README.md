@@ -94,7 +94,12 @@ Use `MERMAIL_API_KEY` whenever possible. `--api-key` is supported for ephemeral 
 
 ```bash
 MERMAIL_BASE_URL=https://console-staging.mermail.app mermail mcp check
+mermail mcp check --profile agent-inbox
 ```
+
+For mailbox-first verification and read-only inbox workflows, hosted Claude and ChatGPT connectors can use OAuth with `https://console.mermail.app/mcp?profile=agent-inbox`; remote-MCP-capable versions of Cursor, VS Code, Codex, and other IDEs can use the same focused endpoint and their supported OAuth flow. Keep `https://console.mermail.app/mcp` for sending and the full tool catalog. The CLI probe remains API-key based. If a client reports `Tool 'Mermail:list_emails' not found` after a catalog or profile update, disconnect and reconnect Mermail, complete OAuth again, then start a new chat or reload the IDE so it discovers a fresh tool catalog.
+
+MCP filters are structured objects, not JSON-encoded strings. For example, call `list_emails` with `query: { "folder": "inbox", "limit": 1, "sortColumn": "date", "sortDirection": "DESC" }`. The equivalent CLI flags are `--folder inbox --limit 1 --sort-column date --sort-direction DESC`.
 
 Destructive commands prompt in an interactive terminal and require `--yes` in non-interactive environments. Write, send, and delete requests are never retried automatically.
 

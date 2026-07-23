@@ -163,9 +163,15 @@ function isTimeoutError(error: unknown) {
   return error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name);
 }
 
-export async function mcpRequest(client: ClientOptions, body: unknown): Promise<any> {
+export async function mcpRequest(
+  client: ClientOptions,
+  body: unknown,
+  options: { profile?: string } = {},
+): Promise<any> {
   if (!client.apiKey) throw new CliError("MERMAIL_API_KEY is not set. Export it or pass --api-key.", 3);
-  const response = await fetch(`${client.baseUrl}/mcp`, {
+  const url = new URL(`${client.baseUrl}/mcp`);
+  if (options.profile) url.searchParams.set("profile", options.profile);
+  const response = await fetch(url, {
     method: "POST",
     headers: { accept: "application/json, text/event-stream", "content-type": "application/json", "x-api-key": client.apiKey },
     body: JSON.stringify(body),
