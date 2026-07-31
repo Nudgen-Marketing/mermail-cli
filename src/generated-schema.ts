@@ -1110,5 +1110,77 @@ export const operationSchemas = {
   "get_or_create_triager_conversation": {
     "query": [],
     "body": []
+  },
+  "list_composio_toolkits": {
+    "query": [],
+    "body": []
+  },
+  "connect_composio_toolkit": {
+    "query": [],
+    "body": [
+      {
+        "name": "callbackUrl",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "authMethod",
+        "type": "string",
+        "required": false,
+        "values": [
+          "oauth",
+          "api_key"
+        ]
+      },
+      {
+        "name": "apiKey",
+        "type": "string",
+        "required": false
+      }
+    ]
+  },
+  "disconnect_composio_toolkit": {
+    "query": [],
+    "body": []
+  },
+  "list_composio_connections": {
+    "query": [],
+    "body": []
+  },
+  "sync_composio_connections": {
+    "query": [],
+    "body": []
+  },
+  "search_composio_tools": {
+    "query": [],
+    "body": []
+  },
+  "get_composio_tool_schema": {
+    "query": [],
+    "body": []
+  },
+  "execute_composio_tool": {
+    "query": [],
+    "body": [
+      {
+        "name": "slug",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "arguments",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "connectedAccountId",
+        "type": "string",
+        "required": false
+      }
+    ]
+  },
+  "get_composio_calendar_account": {
+    "query": [],
+    "body": []
   }
 } as const;

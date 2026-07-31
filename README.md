@@ -111,7 +111,7 @@ npm run check
 npm run validate:remote
 ```
 
-The checked-in operation manifest intentionally exposes 62 Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
+The checked-in operation manifest intentionally exposes 71 Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
 
 ## License
 

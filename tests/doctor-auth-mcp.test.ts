@@ -195,7 +195,7 @@ describe("CLI doctor", () => {
     expect(body.discovery).toBe("ok");
     expect(body.apiKey).toBe("missing");
     expect(body.baseUrl).toBe(baseUrl);
-    expect(body.toolCount).toBe(64);
+    expect(body.toolCount).toBe(73);
     expect(body.hasListEmails).toBe(true);
     expect(body.authModes).toEqual(["oauth2", "api-key"]);
     expect(body.telemetry).toBe("disabled");
@@ -251,7 +251,7 @@ describe("CLI mcp check", () => {
     expect(result.status).toBe(0);
     const body = JSON.parse(result.stdout);
     expect(body.connected).toBe(true);
-    expect(body.tools).toBe(64);
+    expect(body.tools).toBe(73);
     expect(body.server.name).toBe("mermail");
     expect(body.profile).toBe("full");
     expect(body.listEmailsSchema).toBe("compatible");

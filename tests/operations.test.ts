@@ -16,9 +16,9 @@ const openapi = JSON.parse(
 };
 
 describe("operation manifest", () => {
-  it("contains exactly the 62 Sold API business operations", () => {
-    expect(operations).toHaveLength(62);
-    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(62);
+  it("contains exactly the 71 Sold API business operations", () => {
+    expect(operations).toHaveLength(71);
+    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(71);
   });
 
   it("does not expose console-only API key routes", () => {
