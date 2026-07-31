@@ -13465,7 +13465,7 @@
     "/api/v1/integrations/composio/toolkits": {
       "get": {
         "summary": "List Composio toolkits",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nLists available Composio toolkits. **Developer+** required.\n\n**API credits:** 1 (read).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nLists available Composio toolkits for the authenticated Mermail user (session, MCP OAuth, or API key).\n\n**API credits:** 1 (read).",
         "tags": [
           "Integrations"
         ],
@@ -13486,8 +13486,8 @@
                 },
                 "example": [
                   {
-                    "slug": "gmail",
-                    "name": "Gmail"
+                    "slug": "apollo",
+                    "name": "Apollo"
                   }
                 ]
               }
@@ -13581,7 +13581,7 @@
     "/api/v1/integrations/composio/toolkits/{slug}/connect": {
       "post": {
         "summary": "Connect Composio toolkit",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nStarts OAuth connect for a toolkit. **Developer+**.\n\n**API credits:** 10 (provision).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nStarts hosted OAuth or API-key connect for a toolkit. Returns redirectUrl for browser auth.\n\n**API credits:** 10 (provision).",
         "tags": [
           "Integrations"
         ],
@@ -13599,7 +13599,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "gmail"
+            "example": "apollo"
           }
         ],
         "responses": {
@@ -13675,6 +13675,33 @@
             }
           }
         },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "callbackUrl": {
+                    "type": "string"
+                  },
+                  "authMethod": {
+                    "type": "string",
+                    "enum": [
+                      "oauth",
+                      "api_key"
+                    ]
+                  },
+                  "apiKey": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        },
         "x-credits": 10,
         "x-badges": [
           {
@@ -13702,7 +13729,7 @@
     "/api/v1/integrations/composio/toolkits/{slug}/connection": {
       "delete": {
         "summary": "Disconnect Composio toolkit",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nRemoves a toolkit connection. **Developer+**.\n\n**API credits:** 2 (write).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nRemoves a toolkit connection for the authenticated Mermail user.\n\n**API credits:** 2 (write).",
         "tags": [
           "Integrations"
         ],
@@ -13720,7 +13747,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "gmail"
+            "example": "apollo"
           }
         ],
         "responses": {
@@ -13823,7 +13850,7 @@
     "/api/v1/integrations/composio/connections": {
       "get": {
         "summary": "List Composio connections",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nLists active Composio connections. **Developer+**.\n\n**API credits:** 1 (read).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nLists Composio connections for the authenticated Mermail user.\n\n**API credits:** 1 (read).",
         "tags": [
           "Integrations"
         ],
@@ -13934,7 +13961,7 @@
     "/api/v1/integrations/composio/connections/sync": {
       "post": {
         "summary": "Sync Composio connections",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nRefreshes connection state from Composio. **Developer+**.\n\n**API credits:** 2 (write).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nRefreshes connection state from Composio into Mermail.\n\n**API credits:** 2 (write).",
         "tags": [
           "Integrations"
         ],
@@ -14041,10 +14068,399 @@
         }
       }
     },
+    "/api/v1/integrations/composio/tools": {
+      "get": {
+        "summary": "Search Composio tools",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nSearch third-party Composio tool actions. Query params: search, toolkit, limit. Gmail/Outlook tools are omitted.\n\n**API credits:** 1 (read).",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "example": {
+                  "configured": true,
+                  "tools": [
+                    {
+                      "slug": "APOLLO_PEOPLE_SEARCH",
+                      "toolkitSlug": "apollo",
+                      "risk": "read"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked API key / token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "API credits exhausted for this workspace period",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — plan gate, wrong workspace, or missing role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Forbidden"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the rate limit window resets"
+              }
+            }
+          }
+        },
+        "x-credits": 1,
+        "x-badges": [
+          {
+            "name": "Developer",
+            "color": "blue"
+          },
+          {
+            "name": "Enterprise",
+            "color": "purple"
+          }
+        ],
+        "x-plan-access": [
+          "developer",
+          "enterprise"
+        ],
+        "x-mint": {
+          "metadata": {
+            "tag": "Developer+",
+            "title": "Search Composio tools",
+            "sidebarTitle": "Search Composio tools"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/composio/tools/{slug}": {
+      "get": {
+        "summary": "Get Composio tool schema",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nReturns input schema and policy metadata for one Composio tool slug.\n\n**API credits:** 1 (read).",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "Tool slug",
+            "schema": {
+              "type": "string"
+            },
+            "example": "APOLLO_PEOPLE_SEARCH"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "example": {
+                  "configured": true,
+                  "tool": {
+                    "slug": "APOLLO_PEOPLE_SEARCH",
+                    "connected": true,
+                    "allowed": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked API key / token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "API credits exhausted for this workspace period",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — plan gate, wrong workspace, or missing role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Forbidden"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the rate limit window resets"
+              }
+            }
+          }
+        },
+        "x-credits": 1,
+        "x-badges": [
+          {
+            "name": "Developer",
+            "color": "blue"
+          },
+          {
+            "name": "Enterprise",
+            "color": "purple"
+          }
+        ],
+        "x-plan-access": [
+          "developer",
+          "enterprise"
+        ],
+        "x-mint": {
+          "metadata": {
+            "tag": "Developer+",
+            "title": "Get Composio tool schema",
+            "sidebarTitle": "Get Composio tool schema"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/composio/tools/execute": {
+      "post": {
+        "summary": "Execute Composio tool",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nExecutes a connected Composio tool for the authenticated Mermail user. Requires an ACTIVE toolkit connection.\n\n**API credits:** 2 (write).",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Execution result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked API key / token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "API credits exhausted for this workspace period",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — plan gate, wrong workspace, or missing role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Forbidden"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the rate limit window resets"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slug"
+                ],
+                "properties": {
+                  "slug": {
+                    "type": "string"
+                  },
+                  "arguments": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "connectedAccountId": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "example": {
+                "slug": "APOLLO_PEOPLE_SEARCH",
+                "arguments": {}
+              }
+            }
+          }
+        },
+        "x-credits": 2,
+        "x-badges": [
+          {
+            "name": "Developer",
+            "color": "blue"
+          },
+          {
+            "name": "Enterprise",
+            "color": "purple"
+          }
+        ],
+        "x-plan-access": [
+          "developer",
+          "enterprise"
+        ],
+        "x-mint": {
+          "metadata": {
+            "tag": "Developer+",
+            "title": "Execute Composio tool",
+            "sidebarTitle": "Execute Composio tool"
+          }
+        }
+      }
+    },
     "/api/v1/integrations/composio/calendar/account": {
       "get": {
         "summary": "Get Composio calendar account",
-        "description": "**Plans:** `Developer` · `Enterprise`\n\nReturns calendar account binding. **Developer+**.\n\n**API credits:** 1 (read).",
+        "description": "**Plans:** `Developer` · `Enterprise`\n\nReturns Google Calendar connection status and account email when available.\n\n**API credits:** 1 (read).",
         "tags": [
           "Integrations"
         ],

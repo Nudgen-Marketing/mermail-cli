@@ -72,5 +72,14 @@ export const operations: Operation[] = [
   op("update_task_triager", "triagers", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}", ["mailboxId", "triagerId"]),
   op("delete_task_triager", "triagers", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}", ["mailboxId", "triagerId"], true),
   op("set_default_task_triager", "triagers", "set-default", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/default", ["mailboxId", "triagerId"]),
-  op("get_or_create_triager_conversation", "triagers", "conversation", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/agent-conversation", ["mailboxId", "triagerId"])
+  op("get_or_create_triager_conversation", "triagers", "conversation", "POST", "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/agent-conversation", ["mailboxId", "triagerId"]),
+  op("list_composio_toolkits", "composio", "toolkits", "GET", "/api/v1/integrations/composio/toolkits"),
+  op("connect_composio_toolkit", "composio", "connect", "POST", "/api/v1/integrations/composio/toolkits/{slug}/connect", ["slug"]),
+  op("disconnect_composio_toolkit", "composio", "disconnect", "DELETE", "/api/v1/integrations/composio/toolkits/{slug}/connection", ["slug"], true),
+  op("list_composio_connections", "composio", "connections", "GET", "/api/v1/integrations/composio/connections"),
+  op("sync_composio_connections", "composio", "sync", "POST", "/api/v1/integrations/composio/connections/sync"),
+  op("search_composio_tools", "composio", "tools", "GET", "/api/v1/integrations/composio/tools"),
+  op("get_composio_tool_schema", "composio", "tool-schema", "GET", "/api/v1/integrations/composio/tools/{slug}", ["slug"]),
+  op("execute_composio_tool", "composio", "execute", "POST", "/api/v1/integrations/composio/tools/execute"),
+  op("get_composio_calendar_account", "composio", "calendar-account", "GET", "/api/v1/integrations/composio/calendar/account"),
 ];
