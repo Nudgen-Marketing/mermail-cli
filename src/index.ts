@@ -6,7 +6,15 @@ import jmespath from "jmespath";
 import { apiRequest, CliError, mcpRequest, resolveClientOptions } from "./client.js";
 import { operationSchemas } from "./generated-schema.js";
 import { operations, type Operation } from "./operations.js";
+import {
+  loadOauthSession,
+  loginWithOauth,
+  logoutOauth,
+  parseScopes,
+  redactOauthSession,
+} from "./oauth.js";
 import { printError, printOutput, type OutputFormat } from "./output.js";
+import { callWalletTool, submitWalletTransfer } from "./wallet.js";
 import {
   DEFAULT_EMAIL_POLL_INTERVAL,
   DEFAULT_EMAIL_WAIT_TIMEOUT,
@@ -207,6 +215,181 @@ auth.command("check").description("Validate the API key (consumes one read credi
   const { data } = await apiRequest(client, { method: "GET", path: "/api/v1/workspaces" });
   await printOutput({ authenticated: true, workspaces: data }, outputFormat(current));
 });
+auth
+  .command("login")
+  .description("Browser OAuth login for MCP Agent Wallet (PKCE). Does not use MERMAIL_API_KEY.")
+  .option("--read-only", "request wallet:read without wallet:transact")
+  .option("--scopes <scopes>", "comma/space-separated OAuth scopes (overrides --read-only defaults)")
+  .option("--no-browser", "print the authorize URL without opening a browser")
+  .action(async (local: Record<string, unknown>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const scopes = local.scopes
+      ? parseScopes(local.scopes, true)
+      : parseScopes(undefined, !local.readOnly);
+    const session = await loginWithOauth({
+      client,
+      scopes,
+      openBrowser: local.browser !== false,
+    });
+    await printOutput(
+      { authenticated: true, auth: "oauth", ...redactOauthSession(session) },
+      outputFormat(current),
+    );
+  });
+auth.command("status").description("Show API key presence and MCP OAuth session (redacted)").action(async (_local: unknown, current: Command) => {
+  const client = resolveClientOptions(current.optsWithGlobals());
+  const session = await loadOauthSession(client.baseUrl);
+  await printOutput(
+    {
+      apiKeyConfigured: Boolean(client.apiKey),
+      oauth: session ? redactOauthSession(session) : null,
+    },
+    outputFormat(current),
+  );
+});
+auth.command("logout").description("Revoke and clear the local MCP OAuth session").action(async (_local: unknown, current: Command) => {
+  const client = resolveClientOptions(current.optsWithGlobals());
+  const result = await logoutOauth(client);
+  await printOutput(result, outputFormat(current));
+});
+
+const wallet = program.command("wallet").description("Agent Wallet via MCP OAuth (not API key)");
+wallet
+  .command("status")
+  .description("Show Agent Wallet overview for a mailbox")
+  .requiredOption("--mailbox-id <id>", "mailbox public_id, hosted alias id, or current email")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({
+      client,
+      cliVersion: packageJson.version,
+      toolName: "get_agent_wallet",
+      requiredScopes: ["wallet:read"],
+      arguments: { mailboxId: local.mailboxId },
+    });
+    await printOutput(data, outputFormat(current));
+  });
+wallet
+  .command("credentials")
+  .description("List delegated Agent Wallet credentials")
+  .requiredOption("--mailbox-id <id>", "mailbox public_id, hosted alias id, or current email")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({
+      client,
+      cliVersion: packageJson.version,
+      toolName: "list_agent_wallet_credentials",
+      requiredScopes: ["wallet:read"],
+      arguments: { mailboxId: local.mailboxId },
+    });
+    await printOutput(data, outputFormat(current));
+  });
+wallet
+  .command("portfolio")
+  .description("Show Agent Wallet portfolio")
+  .requiredOption("--mailbox-id <id>", "mailbox public_id, hosted alias id, or current email")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({
+      client,
+      cliVersion: packageJson.version,
+      toolName: "get_agent_wallet_portfolio",
+      requiredScopes: ["wallet:read"],
+      arguments: { mailboxId: local.mailboxId },
+    });
+    await printOutput(data, outputFormat(current));
+  });
+const walletRequest = wallet.command("request").description("Agent Wallet request helpers");
+walletRequest
+  .command("get")
+  .description("Poll a known Agent Wallet / PayBox request id")
+  .requiredOption("--request-id <id>", "Mermail provider request id or upstream request id")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({
+      client,
+      cliVersion: packageJson.version,
+      toolName: "get_agent_wallet_request",
+      requiredScopes: ["wallet:read"],
+      arguments: { requestId: local.requestId },
+    });
+    await printOutput(data, outputFormat(current));
+  });
+const walletProposal = wallet.command("proposal").description("USDC transfer proposals");
+walletProposal
+  .command("create")
+  .description("Create a local USDC transfer proposal (does not submit)")
+  .requiredOption("--mailbox-id <id>", "mailbox public_id, hosted alias id, or current email")
+  .addOption(new Option("--chain <chain>", "BASE or SOLANA").choices(["BASE", "SOLANA"]).makeOptionMandatory())
+  .requiredOption("--amount <usdc>", "USDC amount as a plain decimal")
+  .requiredOption("--destination <address>", "destination wallet address")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({
+      client,
+      cliVersion: packageJson.version,
+      toolName: "create_agent_wallet_transfer_proposal",
+      requiredScopes: ["wallet:transact"],
+      arguments: {
+        mailboxId: local.mailboxId,
+        chain: local.chain,
+        amount: local.amount,
+        destination: local.destination,
+      },
+    });
+    await printOutput(data, outputFormat(current));
+  });
+const walletTransfer = wallet.command("transfer").description("Submit reviewed transfers");
+walletTransfer
+  .command("submit")
+  .description("Submit a reviewed proposal (requires prepare_destructive_action + confirmation)")
+  .requiredOption("--proposal-id <id>", "proposal id from wallet proposal create")
+  .requiredOption("--version <n>", "proposal version")
+  .requiredOption("--destination <address>", "must match the proposal destination")
+  .option("--yes", "skip interactive confirmation (required in non-interactive mode)")
+  .action(async (local: Record<string, any>, current: Command) => {
+    const version = Number(local.version);
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw new CliError("--version must be a positive integer", 2);
+    }
+    const preview = {
+      proposalId: local.proposalId,
+      version,
+      confirmationDestination: local.destination,
+      acknowledgeIrreversibleMainnetTransfer: true,
+      irreversible: true,
+      network: "mainnet",
+    };
+    if (!local.yes) {
+      if (!process.stdin.isTTY) {
+        throw new CliError("Destructive wallet submit requires --yes in non-interactive mode", 4);
+      }
+      process.stderr.write(`${JSON.stringify(preview, null, 2)}\n`);
+      const accepted = await confirm({
+        message: "Submit this irreversible mainnet USDC transfer via PayBox?",
+      });
+      if (!accepted) throw new CliError("Cancelled", 130);
+    }
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await submitWalletTransfer({
+      client,
+      cliVersion: packageJson.version,
+      proposalId: local.proposalId,
+      version,
+      confirmationDestination: local.destination,
+      acknowledgeIrreversibleMainnetTransfer: true,
+    });
+    await printOutput(data, outputFormat(current));
+    if (isRecord(data) && data.completed === false) {
+      throw new CliError(
+        "Transfer is pending or uncertain; not treating as success",
+        1,
+        202,
+        "wallet_transfer_pending",
+        data,
+      );
+    }
+  });
 
 const mcp = program.command("mcp");
 mcp.command("check")
@@ -410,12 +593,23 @@ function schemaObjectProperties(schema: Record<string, unknown>): Record<string,
 async function readStdin() { const chunks: Buffer[] = []; for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk)); return Buffer.concat(chunks).toString("utf8"); }
 function completionScript(shell: string) {
   const groups = [...new Set(operations.map((operation) => operation.group))];
-  const root = [...groups, "doctor", "auth", "mcp", "completion", "help"].join(" ");
-  const extraActions: Record<string, string[]> = { emails: ["wait"], mailboxes: ["ensure"] };
-  const actions = Object.fromEntries(groups.map((group) => [group, [
-    ...operations.filter((operation) => operation.group === group).map((operation) => operation.action),
-    ...(extraActions[group] ?? []),
-  ].join(" ")]));
+  const root = [...groups, "doctor", "auth", "mcp", "wallet", "completion", "help"].join(" ");
+  const extraActions: Record<string, string[]> = {
+    emails: ["wait"],
+    mailboxes: ["ensure"],
+    auth: ["check", "login", "status", "logout"],
+    mcp: ["check", "tools"],
+    wallet: ["status", "credentials", "portfolio", "request", "proposal", "transfer"],
+  };
+  const actions = Object.fromEntries(
+    [...groups, "auth", "mcp", "wallet"].map((group) => [
+      group,
+      [
+        ...operations.filter((operation) => operation.group === group).map((operation) => operation.action),
+        ...(extraActions[group] ?? []),
+      ].join(" "),
+    ]),
+  );
   if (shell === "fish") return `complete -c mermail -f\ncomplete -c mermail -n '__fish_use_subcommand' -a '${root}'\n${Object.entries(actions).map(([group, values]) => `complete -c mermail -n '__fish_seen_subcommand_from ${group}' -a '${values}'`).join("\n")}\n`;
   if (shell === "zsh") return `#compdef mermail\nlocal -a commands\ncommands=(${root})\nif (( CURRENT == 2 )); then _describe command commands; return; fi\ncase $words[2] in\n${Object.entries(actions).map(([group, values]) => `  ${group}) _values action ${values} ;;`).join("\n")}\nesac\n`;
   const cases = Object.entries(actions).map(([group, values]) => `${group}) words='${values}' ;;`).join(" ");

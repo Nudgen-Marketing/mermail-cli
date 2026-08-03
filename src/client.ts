@@ -163,21 +163,79 @@ function isTimeoutError(error: unknown) {
   return error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name);
 }
 
+export type McpAuthMode = "api_key" | "oauth";
+
+export type McpRequestOptions = {
+  profile?: string;
+  accessToken?: string;
+  auth?: McpAuthMode;
+  onUnauthorizedOauth?: () => Promise<string | null>;
+};
+
 export async function mcpRequest(
   client: ClientOptions,
   body: unknown,
-  options: { profile?: string } = {},
+  options: McpRequestOptions = {},
 ): Promise<any> {
-  if (!client.apiKey) throw new CliError("MERMAIL_API_KEY is not set. Export it or pass --api-key.", 3);
+  const preferOauth = Boolean(options.accessToken) || options.auth === "oauth";
+  let accessToken = options.accessToken;
+  if (preferOauth && !accessToken) {
+    throw new CliError(
+      "MCP OAuth access token required. Run `mermail auth login --wallet`.",
+      3,
+      401,
+      "oauth_required",
+    );
+  }
+  if (!preferOauth && !client.apiKey) {
+    throw new CliError("MERMAIL_API_KEY is not set. Export it or pass --api-key.", 3, 401, "api_key_required");
+  }
+
   const url = new URL(`${client.baseUrl}/mcp`);
   if (options.profile) url.searchParams.set("profile", options.profile);
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { accept: "application/json, text/event-stream", "content-type": "application/json", "x-api-key": client.apiKey },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(client.timeout)
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.error) throw new CliError(payload?.error?.message ?? `MCP returned HTTP ${response.status}`, response.status === 401 ? 3 : 1, response.status, payload?.error?.code);
+
+  const send = async (token?: string) => {
+    const headers: Record<string, string> = {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    };
+    if (token) headers.authorization = `Bearer ${token}`;
+    else if (client.apiKey) headers["x-api-key"] = client.apiKey;
+    if (client.debug) {
+      process.stderr.write(
+        `[debug] POST ${url.origin}/mcp auth=${token ? "oauth" : "api_key"}${options.profile ? ` profile=${options.profile}` : ""}\n`,
+      );
+    }
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(client.timeout),
+    });
+    const payload = await response.json().catch(() => null);
+    return { response, payload };
+  };
+
+  let { response, payload } = await send(accessToken);
+  if (
+    preferOauth &&
+    response.status === 401 &&
+    typeof options.onUnauthorizedOauth === "function"
+  ) {
+    const refreshed = await options.onUnauthorizedOauth();
+    if (refreshed) {
+      accessToken = refreshed;
+      ({ response, payload } = await send(accessToken));
+    }
+  }
+
+  if (!response.ok || payload?.error) {
+    throw new CliError(
+      payload?.error?.message ?? `MCP returned HTTP ${response.status}`,
+      response.status === 401 ? 3 : 1,
+      response.status,
+      payload?.error?.code,
+    );
+  }
   return payload;
 }

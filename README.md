@@ -31,6 +31,8 @@ mermail emails send \
   --text "Hello from Mermail"
 mermail emails delete --mailbox-id MAILBOX_PUBLIC_ID --email-id MESSAGE_ID --permanent --yes
 mermail mcp check
+mermail auth login
+mermail wallet status --mailbox-id MAILBOX_PUBLIC_ID
 ```
 
 JSON is the default output. Use `--format yaml`, `pretty`, `table`, `raw`, or the interactive `explore` view. Transform structured output with JMESPath:
@@ -88,20 +90,44 @@ Raw/full output remains the default for compatibility. For agent verification, c
 
 ## Authentication
 
-Use `MERMAIL_API_KEY` whenever possible. `--api-key` is supported for ephemeral automation but may be captured in shell history. The CLI never stores credentials and has no telemetry.
+**Sold API mail/workspace commands** use `MERMAIL_API_KEY` (or `--api-key`). The CLI does not store API keys.
 
-**ChatGPT / Codex Official Plugins Directory** (when published) connects Mermail MCP with **OAuth Apps Connected** — no CLI key required there. This CLI always uses an API key against the Sold API / MCP probe endpoints.
+**Agent Wallet** uses MCP OAuth instead. API keys never unlock PayBox / Agent Wallet tools.
+
+```bash
+# Interactive browser PKCE login (stores tokens in ~/.config/mermail/mcp-oauth.json, mode 0600)
+mermail auth login
+mermail auth status
+mermail wallet status --mailbox-id MAILBOX_PUBLIC_ID
+mermail wallet proposal create \
+  --mailbox-id MAILBOX_PUBLIC_ID \
+  --chain BASE \
+  --amount 1.00 \
+  --destination 0x...
+mermail wallet transfer submit \
+  --proposal-id PROPOSAL_ID \
+  --version 1 \
+  --destination 0x... \
+  --yes
+mermail auth logout
+```
+
+`auth login` requires a TTY (not CI headless). Connect PayBox in the Mermail console Agent Wallet page after granting `wallet:read` / `wallet:transact`. Pending or `SUBMISSION_UNKNOWN` results are not success — do not auto-retry.
+
+`mermail auth check` and `mermail mcp check` remain API-key probes for Sold/MCP catalog health.
+
+**ChatGPT / Codex Official Plugins Directory** (when published) connects Mermail MCP with **OAuth Apps Connected** — no CLI key required there.
 
 ```bash
 MERMAIL_BASE_URL=https://console-staging.mermail.app mermail mcp check
 mermail mcp check --profile agent-inbox
 ```
 
-For mailbox-first verification and read-only inbox workflows, hosted Claude and ChatGPT connectors can use OAuth with `https://console.mermail.app/mcp?profile=agent-inbox`; remote-MCP-capable versions of Cursor, VS Code, Codex, and other IDEs can use the same focused endpoint and their supported OAuth flow. Keep `https://console.mermail.app/mcp` for sending and the full tool catalog. The CLI probe remains API-key based. If a client reports `Tool 'Mermail:list_emails' not found` after a catalog or profile update, disconnect and reconnect Mermail, complete OAuth again, then start a new chat or reload the IDE so it discovers a fresh tool catalog.
+For mailbox-first verification and read-only inbox workflows, hosted Claude and ChatGPT connectors can use OAuth with `https://console.mermail.app/mcp?profile=agent-inbox`; remote-MCP-capable versions of Cursor, VS Code, Codex, and other IDEs can use the same focused endpoint and their supported OAuth flow. Keep `https://console.mermail.app/mcp` for sending and the full tool catalog. If a client reports `Tool 'Mermail:list_emails' not found` after a catalog or profile update, disconnect and reconnect Mermail, complete OAuth again, then start a new chat or reload the IDE so it discovers a fresh tool catalog.
 
 MCP filters are structured objects, not JSON-encoded strings. For example, call `list_emails` with `query: { "folder": "inbox", "limit": 1, "sortColumn": "date", "sortDirection": "DESC" }`. The equivalent CLI flags are `--folder inbox --limit 1 --sort-column date --sort-direction DESC`.
 
-Destructive commands prompt in an interactive terminal and require `--yes` in non-interactive environments. Write, send, and delete requests are never retried automatically.
+Destructive commands prompt in an interactive terminal and require `--yes` in non-interactive environments. Write, send, delete, and wallet submit requests are never retried automatically.
 
 ## Development
 
