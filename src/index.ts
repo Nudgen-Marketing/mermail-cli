@@ -299,6 +299,44 @@ wallet
     });
     await printOutput(data, outputFormat(current));
   });
+wallet
+  .command("fund-url")
+  .description(
+    "Print a Mermail console Funding deep link (does not call MoonPay or require OAuth)",
+  )
+  .requiredOption("--mailbox-id <id>", "mailbox public_id (preferred for console URLs)")
+  .option("--amount <usd>", "USD amount for MoonPay (default 1)", "1")
+  .option(
+    "--console-origin <origin>",
+    "Mermail console origin",
+    "https://console.mermail.app",
+  )
+  .action(async (local: Record<string, string>, current: Command) => {
+    const amount = Number(local.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new CliError("--amount must be a positive number", 2, 400, "invalid_amount");
+    }
+    const clamped = Math.min(10_000, Math.max(1, Math.round(amount * 100) / 100));
+    const origin = String(local.consoleOrigin || "https://console.mermail.app").replace(
+      /\/$/,
+      "",
+    );
+    const url = new URL(
+      `/mailbox/${encodeURIComponent(String(local.mailboxId))}/agent-wallet`,
+      `${origin}/`,
+    );
+    url.searchParams.set("fund", "1");
+    url.searchParams.set("amount", String(clamped));
+    await printOutput(
+      {
+        console_url: url.toString(),
+        amount_usd: clamped,
+        message:
+          "Open console_url in a browser to complete MoonPay funding. Checkout URLs are browser-only.",
+      },
+      outputFormat(current),
+    );
+  });
 const walletRequest = wallet.command("request").description("Agent Wallet request helpers");
 walletRequest
   .command("get")
