@@ -114,6 +114,10 @@ mermail auth logout
 
 `auth login` requires a TTY (not CI headless). Connect PayBox in the Mermail console Agent Wallet page after granting `wallet:read` / `wallet:transact`. Pending or `SUBMISSION_UNKNOWN` results are not success — do not auto-retry.
 
+`wallet proposal create --amount` is the human USDC amount for the metered proposal path. It is not the MCP `paybox_request_transfer` field: catalog-token transfers are MCP-only and take the human amount in `amount_decimal`.
+
+`wallet status` can report `connection.status: "PAYBOX_UNAVAILABLE"` with an empty portfolio and a null `portfolio_app` when PayBox did not answer that read. The OAuth connection is still active, so read again later instead of reconnecting; `NOT_CONNECTED` and `REAUTH_REQUIRED` are the states that need action.
+
 `mermail auth check` and `mermail mcp check` remain API-key probes for Sold/MCP catalog health.
 
 **ChatGPT / Codex Official Plugins Directory** (when published) connects Mermail MCP with **OAuth Apps Connected** — no CLI key required there.
