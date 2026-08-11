@@ -337,6 +337,48 @@ wallet
       outputFormat(current),
     );
   });
+wallet
+  .command("sign-url")
+  .description(
+    "Print a Mermail console transfer-signing deep link (does not call PayBox or require OAuth)",
+  )
+  .requiredOption("--mailbox-id <id>", "mailbox public_id (preferred for console URLs)")
+  .requiredOption("--invocation <id>", "PayBox tool invocation id from paybox_request_transfer")
+  .option(
+    "--console-origin <origin>",
+    "Mermail console origin",
+    "https://console.mermail.app",
+  )
+  .action(async (local: Record<string, string>, current: Command) => {
+    const invocation = String(local.invocation || "").trim();
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(invocation)) {
+      throw new CliError(
+        "--invocation must be an opaque 8–128 character id",
+        2,
+        400,
+        "invalid_invocation",
+      );
+    }
+    const origin = String(local.consoleOrigin || "https://console.mermail.app").replace(
+      /\/$/,
+      "",
+    );
+    const url = new URL(
+      `/mailbox/${encodeURIComponent(String(local.mailboxId))}/agent-wallet`,
+      `${origin}/`,
+    );
+    url.searchParams.set("sign", "1");
+    url.searchParams.set("invocation", invocation);
+    await printOutput(
+      {
+        console_url: url.toString(),
+        invocation_id: invocation,
+        message:
+          "Open console_url in a browser to Generate Signing Key and complete PayBox transfer signing. Signing plans are browser-only.",
+      },
+      outputFormat(current),
+    );
+  });
 const walletRequest = wallet.command("request").description("Agent Wallet request helpers");
 walletRequest
   .command("get")
