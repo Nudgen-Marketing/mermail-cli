@@ -300,6 +300,64 @@ wallet
     await printOutput(data, outputFormat(current));
   });
 wallet
+  .command("connect-url")
+  .description(
+    "Print a Mermail Agent Wallet console link for first-time PayBox Connect (no OAuth required)",
+  )
+  .requiredOption("--mailbox-id <id>", "mailbox public_id (preferred for console URLs)")
+  .option(
+    "--console-origin <origin>",
+    "Mermail console origin",
+    "https://console.mermail.app",
+  )
+  .action(async (local: Record<string, string>, current: Command) => {
+    const origin = String(local.consoleOrigin || "https://console.mermail.app").replace(
+      /\/$/,
+      "",
+    );
+    const url = new URL(
+      `/mailbox/${encodeURIComponent(String(local.mailboxId))}/agent-wallet`,
+      `${origin}/`,
+    );
+    await printOutput(
+      {
+        console_url: url.toString(),
+        message:
+          "Open console_url and select Connect to connect PayBox to Mermail. Do not reconnect the Claude, ChatGPT, or Codex Mermail connector.",
+      },
+      outputFormat(current),
+    );
+  });
+wallet
+  .command("reauth-url")
+  .description(
+    "Print a Mermail Agent Wallet console link to reconnect PayBox (no OAuth required)",
+  )
+  .requiredOption("--mailbox-id <id>", "mailbox public_id (preferred for console URLs)")
+  .option(
+    "--console-origin <origin>",
+    "Mermail console origin",
+    "https://console.mermail.app",
+  )
+  .action(async (local: Record<string, string>, current: Command) => {
+    const origin = String(local.consoleOrigin || "https://console.mermail.app").replace(
+      /\/$/,
+      "",
+    );
+    const url = new URL(
+      `/mailbox/${encodeURIComponent(String(local.mailboxId))}/agent-wallet`,
+      `${origin}/`,
+    );
+    await printOutput(
+      {
+        console_url: url.toString(),
+        message:
+          "Open console_url and reconnect PayBox inside Mermail. Do not reconnect the ChatGPT or Codex Mermail connector.",
+      },
+      outputFormat(current),
+    );
+  });
+wallet
   .command("fund-url")
   .description(
     "Print a Mermail console Funding deep link (does not call MoonPay or require OAuth)",
