@@ -116,7 +116,14 @@ mermail auth logout
 
 `wallet proposal create --amount` is the human USDC amount for the metered proposal path. It is not the MCP `paybox_request_transfer` field: catalog-token transfers are MCP-only and take the human amount in `amount_decimal`.
 
-`wallet status` can report `connection.status: "PAYBOX_UNAVAILABLE"` with an empty portfolio and a null `portfolio_app` when PayBox did not answer that read. The OAuth connection is still active, so read again later instead of reconnecting; `NOT_CONNECTED` and `REAUTH_REQUIRED` are the states that need action.
+`wallet status` can report `connection.status: "PAYBOX_UNAVAILABLE"` with an empty portfolio and a null `portfolio_app` when PayBox did not answer that read. The OAuth connection is still active, so read again later instead of reconnecting; `NOT_CONNECTED` and `REAUTH_REQUIRED` are the states that need action. Print `mermail wallet connect-url` or `mermail wallet reauth-url` and open that Mermail Agent Wallet link — do not reconnect the Claude/ChatGPT/Codex Mermail connector for PayBox.
+
+```bash
+mermail wallet connect-url --mailbox-id MAILBOX_PUBLIC_ID
+mermail wallet reauth-url --mailbox-id MAILBOX_PUBLIC_ID
+mermail wallet fund-url --mailbox-id MAILBOX_PUBLIC_ID --amount 1
+mermail wallet sign-url --mailbox-id MAILBOX_PUBLIC_ID --invocation INVOCATION_ID
+```
 
 `mermail auth check` and `mermail mcp check` remain API-key probes for Sold/MCP catalog health.
 
