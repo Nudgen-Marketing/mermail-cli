@@ -90,7 +90,7 @@ export async function callWalletTool(input: {
   const missing = sessionHasScopes(session, input.requiredScopes);
   if (missing.length) {
     throw new CliError(
-      `MCP OAuth session is missing scopes: ${missing.join(", ")}. Re-run \`mermail auth login --wallet\`.`,
+      `MCP OAuth session is missing scopes: ${missing.join(", ")}. Re-run \`mermail auth login\`.`,
       3,
       403,
       "wallet_scope_missing",
@@ -116,7 +116,7 @@ export async function callWalletTool(input: {
   );
   if (!names.has(input.toolName)) {
     throw new CliError(
-      `MCP tool ${input.toolName} is unavailable. Confirm OAuth wallet scopes and that PayBox Agent Wallet is connected in the Mermail console.`,
+      `MCP tool ${input.toolName} is unavailable. Confirm the OAuth session has mcp:tools, the caller is the workspace owner, and PayBox Agent Wallet is connected in the Mermail console.`,
       1,
       403,
       "wallet_tool_unavailable",
@@ -145,43 +145,15 @@ export async function submitWalletTransfer(input: {
   cliVersion: string;
   proposalId: string;
   version: number;
-  confirmationDestination: string;
-  acknowledgeIrreversibleMainnetTransfer: true;
 }) {
-  const submitArguments = {
-    proposalId: input.proposalId,
-    version: input.version,
-    confirmationDestination: input.confirmationDestination,
-    acknowledgeIrreversibleMainnetTransfer: true as const,
-  };
-
-  const prepared = await callWalletTool({
-    client: input.client,
-    cliVersion: input.cliVersion,
-    toolName: "prepare_destructive_action",
-    requiredScopes: ["wallet:transact"],
-    arguments: {
-      action: "submit_agent_wallet_transfer",
-      arguments: submitArguments,
-    },
-  });
-  if (!isRecord(prepared) || typeof prepared.confirmationToken !== "string") {
-    throw new CliError(
-      "prepare_destructive_action did not return a confirmation token",
-      1,
-      502,
-      "confirmation_unavailable",
-    );
-  }
-
   const result = await callWalletTool({
     client: input.client,
     cliVersion: input.cliVersion,
     toolName: "submit_agent_wallet_transfer",
-    requiredScopes: ["wallet:transact"],
+    requiredScopes: ["mcp:tools"],
     arguments: {
-      ...submitArguments,
-      confirmationToken: prepared.confirmationToken,
+      proposalId: input.proposalId,
+      version: input.version,
     },
   });
 
@@ -192,9 +164,11 @@ export async function submitWalletTransfer(input: {
         : typeof result.proposal_status === "string"
           ? result.proposal_status
           : undefined;
+    const hasSigningHandoff = isRecord(result.signing_handoff);
     if (
-      status &&
-      /pending|unknown|submission_unknown|pending_paybox_approval/i.test(status)
+      result.completed === false ||
+      hasSigningHandoff ||
+      (status && /pending|unknown|submission_unknown|pending_paybox_approval/i.test(status))
     ) {
       return {
         ...result,

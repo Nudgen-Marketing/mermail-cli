@@ -35,10 +35,6 @@ export const operationSchemas = {
       }
     ]
   },
-  "delete_workspace": {
-    "query": [],
-    "body": []
-  },
   "get_workspace_storage": {
     "query": [],
     "body": []
@@ -391,6 +387,29 @@ export const operationSchemas = {
         "type": "boolean",
         "required": false,
         "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
+      }
+    ],
+    "body": []
+  },
+  "get_email_context": {
+    "query": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Maximum messages in this oldest-first thread page"
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Opaque next_cursor from the preceding context page"
+      },
+      {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Include held mail only for the active verification flow"
       }
     ],
     "body": []
@@ -1100,10 +1119,6 @@ export const operationSchemas = {
     ]
   },
   "delete_task_triager": {
-    "query": [],
-    "body": []
-  },
-  "set_default_task_triager": {
     "query": [],
     "body": []
   },

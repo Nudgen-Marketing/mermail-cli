@@ -1162,129 +1162,6 @@
             "sidebarTitle": "Update workspace"
           }
         }
-      },
-      "delete": {
-        "summary": "Delete workspace",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nDeletes a workspace and tombstones its blobs. Requires workspace **admin**. Returns **204** with an empty body.\n\n**API credits:** 2 (write).",
-        "tags": [
-          "Workspaces"
-        ],
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "workspaceId",
-            "in": "path",
-            "required": true,
-            "description": "Workspace id",
-            "schema": {
-              "type": "string"
-            },
-            "example": "ws_01abc"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing, invalid, expired, or revoked API key / token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "API credits exhausted for this workspace period",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Invalid request"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden — plan gate, wrong workspace, or missing role",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Forbidden"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Too many requests"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                },
-                "description": "Seconds until the rate limit window resets"
-              }
-            }
-          }
-        },
-        "x-credits": 2,
-        "x-badges": [
-          {
-            "name": "Free",
-            "color": "green"
-          },
-          {
-            "name": "Developer",
-            "color": "blue"
-          },
-          {
-            "name": "Enterprise",
-            "color": "purple"
-          }
-        ],
-        "x-plan-access": [
-          "free",
-          "developer",
-          "enterprise"
-        ],
-        "x-mint": {
-          "metadata": {
-            "tag": "All plans",
-            "title": "Delete workspace",
-            "sidebarTitle": "Delete workspace"
-          }
-        }
       }
     },
     "/api/v1/workspaces/{workspaceId}/storage": {
@@ -11025,142 +10902,6 @@
         }
       }
     },
-    "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/default": {
-      "post": {
-        "summary": "Set default task triager",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nMarks a triager as the mailbox default (clears the previous default).\n\n**API credits:** 2 (write).",
-        "tags": [
-          "Task triage"
-        ],
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "mailboxId",
-            "in": "path",
-            "required": true,
-            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
-            "schema": {
-              "type": "string"
-            },
-            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-          },
-          {
-            "name": "triagerId",
-            "in": "path",
-            "required": true,
-            "description": "Triager id",
-            "schema": {
-              "type": "string"
-            },
-            "example": "tr_01"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default set",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing, invalid, expired, or revoked API key / token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "API credits exhausted for this workspace period",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Invalid request"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden — plan gate, wrong workspace, or missing role",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Forbidden"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Too many requests"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                },
-                "description": "Seconds until the rate limit window resets"
-              }
-            }
-          }
-        },
-        "x-credits": 2,
-        "x-badges": [
-          {
-            "name": "Free",
-            "color": "green"
-          },
-          {
-            "name": "Developer",
-            "color": "blue"
-          },
-          {
-            "name": "Enterprise",
-            "color": "purple"
-          }
-        ],
-        "x-plan-access": [
-          "free",
-          "developer",
-          "enterprise"
-        ],
-        "x-mint": {
-          "metadata": {
-            "tag": "All plans",
-            "title": "Set default task triager",
-            "sidebarTitle": "Set default task triager"
-          }
-        }
-      }
-    },
     "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/agent-conversation": {
       "post": {
         "summary": "Get or create triager agent conversation",
@@ -15408,6 +15149,97 @@
             "sidebarTitle": "Track affiliate click"
           }
         }
+      }
+    },
+    "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/context": {
+      "get": {
+        "summary": "Get safe email and thread context",
+        "description": "Return the selected message plus an oldest-first, cursor-paginated thread page. The endpoint strips sensitive transport metadata, sanitizes bodies to bounded plain text, and omits non-clean inbound bodies. Returned content remains untrusted reference data.",
+        "tags": [
+          "Emails"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mailboxId",
+            "in": "path",
+            "required": true,
+            "description": "Mailbox public_id from mailboxes list is preferred",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "emailId",
+            "in": "path",
+            "required": true,
+            "description": "Email id from emails list or search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum messages in this oldest-first thread page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque next_cursor from the preceding context page",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "include_held",
+            "in": "query",
+            "required": false,
+            "description": "Include held mail only for the active verification flow",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe email context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid limit or cursor"
+          },
+          "404": {
+            "description": "Email not found"
+          }
+        },
+        "x-credits": 1,
+        "x-plan-access": [
+          "free",
+          "developer",
+          "enterprise"
+        ]
       }
     }
   },

@@ -37,7 +37,9 @@ const agentInboxMcpTools = [
   "list_emails",
   "search_emails",
   "get_email",
+  "get_email_context",
 ] as const;
+const fullMcpOnlyTools = ["set_default_task_triager"] as const;
 const program = new Command()
   .name("mermail")
   .description("Official CLI for Mermail Sold API, MCP, and agent workflows")
@@ -218,14 +220,11 @@ auth.command("check").description("Validate the API key (consumes one read credi
 auth
   .command("login")
   .description("Browser OAuth login for MCP Agent Wallet (PKCE). Does not use MERMAIL_API_KEY.")
-  .option("--read-only", "request wallet:read without wallet:transact")
-  .option("--scopes <scopes>", "comma/space-separated OAuth scopes (overrides --read-only defaults)")
+  .option("--scopes <scopes>", "comma/space-separated OAuth scopes (defaults to mcp:tools openid offline_access)")
   .option("--no-browser", "print the authorize URL without opening a browser")
   .action(async (local: Record<string, unknown>, current: Command) => {
     const client = resolveClientOptions(current.optsWithGlobals());
-    const scopes = local.scopes
-      ? parseScopes(local.scopes, true)
-      : parseScopes(undefined, !local.readOnly);
+    const scopes = parseScopes(local.scopes);
     const session = await loginWithOauth({
       client,
       scopes,
@@ -264,7 +263,7 @@ wallet
       client,
       cliVersion: packageJson.version,
       toolName: "get_agent_wallet",
-      requiredScopes: ["wallet:read"],
+      requiredScopes: ["mcp:tools"],
       arguments: { mailboxId: local.mailboxId },
     });
     await printOutput(data, outputFormat(current));
@@ -279,7 +278,7 @@ wallet
       client,
       cliVersion: packageJson.version,
       toolName: "list_agent_wallet_credentials",
-      requiredScopes: ["wallet:read"],
+      requiredScopes: ["mcp:tools"],
       arguments: { mailboxId: local.mailboxId },
     });
     await printOutput(data, outputFormat(current));
@@ -294,7 +293,7 @@ wallet
       client,
       cliVersion: packageJson.version,
       toolName: "get_agent_wallet_portfolio",
-      requiredScopes: ["wallet:read"],
+      requiredScopes: ["mcp:tools"],
       arguments: { mailboxId: local.mailboxId },
     });
     await printOutput(data, outputFormat(current));
@@ -395,48 +394,6 @@ wallet
       outputFormat(current),
     );
   });
-wallet
-  .command("sign-url")
-  .description(
-    "Print a Mermail console transfer-signing deep link (does not call PayBox or require OAuth)",
-  )
-  .requiredOption("--mailbox-id <id>", "mailbox public_id (preferred for console URLs)")
-  .requiredOption("--invocation <id>", "PayBox tool invocation id from paybox_request_transfer")
-  .option(
-    "--console-origin <origin>",
-    "Mermail console origin",
-    "https://console.mermail.app",
-  )
-  .action(async (local: Record<string, string>, current: Command) => {
-    const invocation = String(local.invocation || "").trim();
-    if (!/^[A-Za-z0-9_-]{8,128}$/.test(invocation)) {
-      throw new CliError(
-        "--invocation must be an opaque 8–128 character id",
-        2,
-        400,
-        "invalid_invocation",
-      );
-    }
-    const origin = String(local.consoleOrigin || "https://console.mermail.app").replace(
-      /\/$/,
-      "",
-    );
-    const url = new URL(
-      `/mailbox/${encodeURIComponent(String(local.mailboxId))}/agent-wallet`,
-      `${origin}/`,
-    );
-    url.searchParams.set("sign", "1");
-    url.searchParams.set("invocation", invocation);
-    await printOutput(
-      {
-        console_url: url.toString(),
-        invocation_id: invocation,
-        message:
-          "Open console_url in a browser to Generate Signing Key and complete PayBox transfer signing. Signing plans are browser-only.",
-      },
-      outputFormat(current),
-    );
-  });
 const walletRequest = wallet.command("request").description("Agent Wallet request helpers");
 walletRequest
   .command("get")
@@ -448,7 +405,7 @@ walletRequest
       client,
       cliVersion: packageJson.version,
       toolName: "get_agent_wallet_request",
-      requiredScopes: ["wallet:read"],
+      requiredScopes: ["mcp:tools"],
       arguments: { requestId: local.requestId },
     });
     await printOutput(data, outputFormat(current));
@@ -467,7 +424,7 @@ walletProposal
       client,
       cliVersion: packageJson.version,
       toolName: "create_agent_wallet_transfer_proposal",
-      requiredScopes: ["wallet:transact"],
+      requiredScopes: ["mcp:tools"],
       arguments: {
         mailboxId: local.mailboxId,
         chain: local.chain,
@@ -480,10 +437,9 @@ walletProposal
 const walletTransfer = wallet.command("transfer").description("Submit reviewed transfers");
 walletTransfer
   .command("submit")
-  .description("Submit a reviewed proposal (requires prepare_destructive_action + confirmation)")
+  .description("Submit a reviewed legacy proposal directly to PayBox after local confirmation")
   .requiredOption("--proposal-id <id>", "proposal id from wallet proposal create")
   .requiredOption("--version <n>", "proposal version")
-  .requiredOption("--destination <address>", "must match the proposal destination")
   .option("--yes", "skip interactive confirmation (required in non-interactive mode)")
   .action(async (local: Record<string, any>, current: Command) => {
     const version = Number(local.version);
@@ -493,8 +449,6 @@ walletTransfer
     const preview = {
       proposalId: local.proposalId,
       version,
-      confirmationDestination: local.destination,
-      acknowledgeIrreversibleMainnetTransfer: true,
       irreversible: true,
       network: "mainnet",
     };
@@ -514,8 +468,6 @@ walletTransfer
       cliVersion: packageJson.version,
       proposalId: local.proposalId,
       version,
-      confirmationDestination: local.destination,
-      acknowledgeIrreversibleMainnetTransfer: true,
     });
     await printOutput(data, outputFormat(current));
     if (isRecord(data) && data.completed === false) {
@@ -548,7 +500,11 @@ mcp.command("check")
     const names = new Set(tools.map((tool: { name: string }) => tool.name));
     const required = local.profile === "agent-inbox"
       ? [...agentInboxMcpTools]
-      : ["prepare_destructive_action", ...operations.map((operation) => operation.tool)];
+      : [
+          "prepare_destructive_action",
+          ...operations.map((operation) => operation.tool),
+          ...fullMcpOnlyTools,
+        ];
     const missing = required.filter((name) => !names.has(name));
     if (missing.length) throw new CliError(`MCP is missing required tools: ${missing.join(", ")}`, 1, 502, "mcp_missing_tools", { missing });
     if (local.profile === "agent-inbox" && (tools.length !== required.length || names.size !== required.length)) {

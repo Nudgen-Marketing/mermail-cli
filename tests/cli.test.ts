@@ -86,6 +86,21 @@ describe("CLI process", () => {
     expect(get.stdout).toContain("--agent-safe-content");
   });
 
+  it("exposes bounded email context and omits retired CLI workflows", () => {
+    const context = cli(["emails", "context", "--help"]);
+    const wallet = cli(["wallet", "--help"]);
+    const workspaces = cli(["workspaces", "--help"]);
+    const triagers = cli(["triagers", "--help"]);
+    expect(context.status).toBe(0);
+    expect(context.stdout).toContain("--email-id");
+    expect(context.stdout).toContain("--limit");
+    expect(context.stdout).toContain("--cursor");
+    expect(context.stdout).toContain("--include-held");
+    expect(wallet.stdout).not.toContain("sign-url");
+    expect(workspaces.stdout).not.toContain("delete");
+    expect(triagers.stdout).not.toContain("set-default");
+  });
+
   it("rejects an empty repeated baseline email id before networking", () => {
     const result = cli([
       "emails", "wait",

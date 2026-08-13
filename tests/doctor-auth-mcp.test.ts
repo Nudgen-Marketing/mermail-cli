@@ -38,6 +38,7 @@ const listEmailsInputSchema = {
 const tools = [
   "prepare_destructive_action",
   ...operations.map((operation) => operation.tool),
+  "set_default_task_triager",
   "future_additive_tool",
 ].map((name) => ({
   name,
@@ -57,6 +58,7 @@ const agentInboxTools = new Set([
   "list_emails",
   "search_emails",
   "get_email",
+  "get_email_context",
 ]);
 
 let baseUrl = "";
@@ -267,7 +269,7 @@ describe("CLI mcp check", () => {
     expect(lastMcpProfile).toBe("agent-inbox");
     expect(body).toMatchObject({
       connected: true,
-      tools: 11,
+      tools: 12,
       profile: "agent-inbox",
       listEmailsSchema: "compatible",
     });
@@ -283,8 +285,8 @@ describe("CLI mcp check", () => {
     expect(JSON.parse(result.stderr).error).toMatchObject({
       code: "mcp_profile_mismatch",
       details: {
-        expected: 11,
-        discovered: 12,
+        expected: 12,
+        discovered: 13,
         unexpected: ["future_additive_tool"],
       },
     });

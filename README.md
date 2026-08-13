@@ -107,12 +107,11 @@ mermail wallet proposal create \
 mermail wallet transfer submit \
   --proposal-id PROPOSAL_ID \
   --version 1 \
-  --destination 0x... \
   --yes
 mermail auth logout
 ```
 
-`auth login` requires a TTY (not CI headless). Connect PayBox in the Mermail console Agent Wallet page after granting `wallet:read` / `wallet:transact`. Pending or `SUBMISSION_UNKNOWN` results are not success — do not auto-retry.
+`auth login` requires a TTY (not CI headless) and defaults to the core `mcp:tools openid offline_access` scopes. Legacy `wallet:read` / `wallet:transact` labels are compatibility-only and are not required for Agent Wallet visibility. Connect PayBox in the Mermail console Agent Wallet page. Pending or `SUBMISSION_UNKNOWN` results are not success — do not auto-retry.
 
 `wallet proposal create --amount` is the human USDC amount for the metered proposal path. It is not the MCP `paybox_request_transfer` field: catalog-token transfers are MCP-only and take the human amount in `amount_decimal`.
 
@@ -122,8 +121,9 @@ mermail auth logout
 mermail wallet connect-url --mailbox-id MAILBOX_PUBLIC_ID
 mermail wallet reauth-url --mailbox-id MAILBOX_PUBLIC_ID
 mermail wallet fund-url --mailbox-id MAILBOX_PUBLIC_ID --amount 1
-mermail wallet sign-url --mailbox-id MAILBOX_PUBLIC_ID --invocation INVOCATION_ID
 ```
+
+For signing, use the PayBox MCP App when the host renders it. Otherwise print the exact invocation-scoped `signing_handoff.console_url` returned by the transfer tool. Never construct, rewrite, or bind a signing URL to a mailbox locally.
 
 `mermail auth check` and `mermail mcp check` remain API-key probes for Sold/MCP catalog health.
 
@@ -138,6 +138,10 @@ For mailbox-first verification and read-only inbox workflows, hosted Claude and 
 
 MCP filters are structured objects, not JSON-encoded strings. For example, call `list_emails` with `query: { "folder": "inbox", "limit": 1, "sortColumn": "date", "sortDirection": "DESC" }`. The equivalent CLI flags are `--folder inbox --limit 1 --sort-column date --sort-direction DESC`.
 
+After selecting one unambiguous message, `mermail emails context --mailbox-id ... --email-id ...` returns its sanitized message plus a bounded oldest-first thread page. Follow `next_cursor` only when more context is needed. The Agent Inbox MCP profile contains exactly 12 tools, including `get_email_context`.
+
+The CLI intentionally does not expose workspace deletion or selecting a default task triager. Workspace deletion is disabled, and task triagers operate independently without a CLI default-selection workflow.
+
 Destructive commands prompt in an interactive terminal and require `--yes` in non-interactive environments. Write, send, delete, and wallet submit requests are never retried automatically.
 
 ## Development
@@ -148,7 +152,7 @@ npm run check
 npm run validate:remote
 ```
 
-The checked-in operation manifest intentionally exposes 71 Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
+The checked-in operation manifest intentionally exposes 70 supported Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
 
 ## License
 

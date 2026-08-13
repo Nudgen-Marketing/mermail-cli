@@ -16,9 +16,9 @@ const openapi = JSON.parse(
 };
 
 describe("operation manifest", () => {
-  it("contains exactly the 71 Sold API business operations", () => {
-    expect(operations).toHaveLength(71);
-    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(71);
+  it("contains exactly the 70 supported Sold API business operations", () => {
+    expect(operations).toHaveLength(70);
+    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(70);
   });
 
   it("does not expose console-only API key routes", () => {
@@ -60,6 +60,9 @@ describe("operation manifest", () => {
         "agent_safe_content",
       ]),
     );
+    expect(operationSchemas.get_email_context.query.map((field) => field.name)).toEqual(
+      expect.arrayContaining(["limit", "cursor", "include_held"]),
+    );
     expect(operationSchemas.search_emails.query.find((field) => field.name === "require_scan_status")?.values).toEqual(["clean", "flagged", "skipped"]);
   });
 
@@ -69,7 +72,13 @@ describe("operation manifest", () => {
       expect.objectContaining({ tool: "create_mailbox", group: "mailboxes", action: "create", method: "POST" }),
       expect.objectContaining({ tool: "search_emails", group: "emails", action: "search", method: "GET" }),
       expect.objectContaining({ tool: "get_email", group: "emails", action: "get", method: "GET" }),
+      expect.objectContaining({ tool: "get_email_context", group: "emails", action: "context", method: "GET" }),
     ]));
+  });
+
+  it("does not expose disabled workspace deletion or default-triager selection", () => {
+    expect(operations.some((operation) => operation.tool === "delete_workspace")).toBe(false);
+    expect(operations.some((operation) => operation.tool === "set_default_task_triager")).toBe(false);
   });
 
   it("documents the stable Mermail id and secondary provider message id", () => {

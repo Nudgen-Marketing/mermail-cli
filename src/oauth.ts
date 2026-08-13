@@ -10,15 +10,6 @@ export const DEFAULT_WALLET_SCOPES = [
   "mcp:tools",
   "openid",
   "offline_access",
-  "wallet:read",
-  "wallet:transact",
-] as const;
-
-export const WALLET_READ_SCOPES = [
-  "mcp:tools",
-  "openid",
-  "offline_access",
-  "wallet:read",
 ] as const;
 
 export type StoredOauthSession = {
@@ -345,11 +336,11 @@ async function exchangeToken(input: {
   };
 }
 
-export function parseScopes(value: unknown, wallet = false): string[] {
+export function parseScopes(value: unknown): string[] {
   if (typeof value === "string" && value.trim()) {
     return [...new Set(value.split(/[,\s]+/).map((part) => part.trim()).filter(Boolean))];
   }
-  return [...(wallet ? DEFAULT_WALLET_SCOPES : WALLET_READ_SCOPES)];
+  return [...DEFAULT_WALLET_SCOPES];
 }
 
 export async function loginWithOauth(input: {

@@ -37,15 +37,13 @@ describe("oauth helpers", () => {
     await rm(configDir, { recursive: true, force: true });
   });
 
-  it("parses wallet scopes", () => {
-    expect(parseScopes(undefined, true)).toEqual([
+  it("defaults to the core MCP OAuth scopes", () => {
+    expect(parseScopes(undefined)).toEqual([
       "mcp:tools",
       "openid",
       "offline_access",
-      "wallet:read",
-      "wallet:transact",
     ]);
-    expect(parseScopes("mcp:tools,wallet:read", false)).toEqual([
+    expect(parseScopes("mcp:tools,wallet:read")).toEqual([
       "mcp:tools",
       "wallet:read",
     ]);
@@ -146,7 +144,7 @@ describe("wallet mcp helpers", () => {
     ).toThrow(CliError);
   });
 
-  it("requires --yes path to bind prepare then submit arguments exactly", async () => {
+  it("submits the legacy proposal directly with the current MCP schema", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "mermail-cli-wallet-"));
     process.env.MERMAIL_CONFIG_DIR = configDir;
     await saveOauthSession({
@@ -155,7 +153,7 @@ describe("wallet mcp helpers", () => {
       accessToken: "mcp_at_test",
       refreshToken: "mcp_rt_test",
       expiresAt: Date.now() + 60_000,
-      scopes: ["mcp:tools", "wallet:read", "wallet:transact"],
+      scopes: ["mcp:tools"],
       resource: "http://127.0.0.1/mcp",
       updatedAt: new Date().toISOString(),
     });
@@ -183,7 +181,6 @@ describe("wallet mcp helpers", () => {
           id: body.id,
           result: {
             tools: [
-              { name: "prepare_destructive_action" },
               { name: "submit_agent_wallet_transfer" },
               { name: "get_agent_wallet" },
             ],
@@ -193,14 +190,6 @@ describe("wallet mcp helpers", () => {
       }
       if (body.method === "tools/call") {
         calls.push({ name: body.params?.name, arguments: body.params?.arguments });
-        if (body.params?.name === "prepare_destructive_action") {
-          sendJson(res, 200, {
-            jsonrpc: "2.0",
-            id: body.id,
-            result: { structuredContent: { confirmationToken: "mcp_confirm_test" } },
-          });
-          return;
-        }
         sendJson(res, 200, {
           jsonrpc: "2.0",
           id: body.id,
@@ -220,7 +209,7 @@ describe("wallet mcp helpers", () => {
       accessToken: "mcp_at_test",
       refreshToken: "mcp_rt_test",
       expiresAt: Date.now() + 60_000,
-      scopes: ["mcp:tools", "wallet:read", "wallet:transact"],
+      scopes: ["mcp:tools"],
       resource: `${baseUrl}/mcp`,
       updatedAt: new Date().toISOString(),
     });
@@ -231,27 +220,13 @@ describe("wallet mcp helpers", () => {
         cliVersion: "0.0.0-test",
         proposalId: "proposal-1",
         version: 2,
-        confirmationDestination: "0xabc",
-        acknowledgeIrreversibleMainnetTransfer: true,
       });
       expect(result).toMatchObject({ status: "SUCCEEDED", completed: true });
-      const prepare = calls.find((call) => call.name === "prepare_destructive_action");
       const submit = calls.find((call) => call.name === "submit_agent_wallet_transfer");
-      expect(prepare?.arguments).toEqual({
-        action: "submit_agent_wallet_transfer",
-        arguments: {
-          proposalId: "proposal-1",
-          version: 2,
-          confirmationDestination: "0xabc",
-          acknowledgeIrreversibleMainnetTransfer: true,
-        },
-      });
+      expect(calls).toHaveLength(1);
       expect(submit?.arguments).toEqual({
         proposalId: "proposal-1",
         version: 2,
-        confirmationDestination: "0xabc",
-        acknowledgeIrreversibleMainnetTransfer: true,
-        confirmationToken: "mcp_confirm_test",
       });
     } finally {
       await new Promise<void>((resolve, reject) =>
@@ -273,8 +248,6 @@ describe("wallet mcp helpers", () => {
         cliVersion: "0.0.0-test",
         proposalId: "proposal-1",
         version: 1,
-        confirmationDestination: "0xabc",
-        acknowledgeIrreversibleMainnetTransfer: true,
       }),
     ).rejects.toMatchObject({ code: "oauth_required", exitCode: 3 });
     delete process.env.MERMAIL_CONFIG_DIR;
