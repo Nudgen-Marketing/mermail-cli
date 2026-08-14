@@ -212,7 +212,10 @@ export async function mcpRequest(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(client.timeout),
     });
-    const payload = await response.json().catch(() => null);
+    const payload = await readMcpResponse(
+      response,
+      isRecord(body) ? body.id : undefined,
+    );
     return { response, payload };
   };
 
@@ -230,12 +233,77 @@ export async function mcpRequest(
   }
 
   if (!response.ok || payload?.error) {
+    const mcpError = isRecord(payload?.error) ? payload.error : {};
+    const mcpErrorData = isRecord(mcpError.data) ? mcpError.data : {};
+    const publicCode =
+      typeof mcpErrorData.code === "string"
+        ? mcpErrorData.code
+        : typeof mcpError.code === "string"
+          ? mcpError.code
+          : typeof payload?.error === "string"
+            ? payload.error
+            : undefined;
     throw new CliError(
-      payload?.error?.message ?? `MCP returned HTTP ${response.status}`,
+      typeof mcpError.message === "string"
+        ? mcpError.message
+        : typeof payload?.error === "string"
+          ? payload.error
+          : `MCP returned HTTP ${response.status}`,
       response.status === 401 ? 3 : 1,
       response.status,
-      payload?.error?.code,
+      publicCode,
+      mcpErrorData,
+      response.headers.get("x-request-id") ?? undefined,
+      parseRetryAfter(response.headers.get("retry-after")),
     );
   }
   return payload;
+}
+
+async function readMcpResponse(response: Response, expectedId?: unknown): Promise<any> {
+  const body = await response.text();
+  if (!body.trim()) return null;
+  const contentType = response.headers.get("content-type") ?? "";
+
+  try {
+    if (contentType.includes("text/event-stream")) {
+      const messages: unknown[] = [];
+      let dataLines: string[] = [];
+      const flush = () => {
+        if (!dataLines.length) return;
+        const value = dataLines.join("\n").trim();
+        dataLines = [];
+        if (value && value !== "[DONE]") messages.push(JSON.parse(value));
+      };
+      for (const line of body.replaceAll("\r\n", "\n").split("\n")) {
+        if (!line) {
+          flush();
+          continue;
+        }
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      flush();
+      if (messages.length) {
+        if (expectedId !== undefined) {
+          const matching = messages.filter(
+            (message) => isRecord(message) && message.id === expectedId,
+          );
+          if (matching.length) return matching.at(-1);
+        }
+        return messages.at(-1);
+      }
+      throw new SyntaxError("SSE response contained no JSON-RPC data event");
+    }
+    return JSON.parse(body);
+  } catch {
+    if (!response.ok) return null;
+    throw new CliError(
+      `MCP returned an invalid ${contentType.includes("text/event-stream") ? "event stream" : "JSON response"} with HTTP ${response.status}`,
+      1,
+      response.status,
+      "invalid_response",
+      undefined,
+      response.headers.get("x-request-id") ?? undefined,
+    );
+  }
 }

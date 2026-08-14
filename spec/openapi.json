@@ -68,6 +68,11 @@
           "name": "get_email",
           "method": "GET",
           "path": "/api/v1/mailboxes/{mailboxId}/emails/{emailId}"
+        },
+        {
+          "name": "get_email_context",
+          "method": "GET",
+          "path": "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/context"
         }
       ]
     }
@@ -4245,7 +4250,7 @@
       },
       "post": {
         "summary": "Send email",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSends a new outbound email from the mailbox. Provide `html` and/or `text` (at least one required). Subject to send rate limits and API credits. Returns **202** with `{ id, status: \"sent\" }`.\n\n**API credits:** 5 (email_send).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSends a new outbound email from the mailbox. Provide `html` and/or `text` (at least one required). Free external sends count To+Cc+Bcc and allow 10 recipients/request, 10/minute, 50/hour, and 200/day. Respect `Retry-After` and never auto-replay a send-like write. Returns **202** with `{ id, status: \"sent\" }`.\n\n**API credits:** 5 (email_send).",
         "tags": [
           "Emails"
         ],
@@ -4282,14 +4287,24 @@
             }
           },
           "400": {
-            "description": "Validation error",
+            "description": "Validation error, including email_send_recipient_limit_exceeded when a Free external send has more than 10 total To+Cc+Bcc recipients",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
-                "example": {
-                  "error": "Invalid request"
+                "examples": {
+                  "recipientLimit": {
+                    "value": {
+                      "error": "email_send_recipient_limit_exceeded",
+                      "code": "email_send_recipient_limit_exceeded"
+                    }
+                  },
+                  "validation": {
+                    "value": {
+                      "error": "Invalid request"
+                    }
+                  }
                 }
               }
             }
@@ -4334,14 +4349,15 @@
             }
           },
           "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "description": "Workspace RPM or external recipient window exceeded. email_send_rate_limit_exceeded is not safe for automatic write replay; Free windows are 10 recipient units/minute, 50/hour, and 200/day.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
                 "example": {
-                  "error": "Too many requests"
+                  "error": "email_send_rate_limit_exceeded",
+                  "code": "email_send_rate_limit_exceeded"
                 }
               }
             },
@@ -4351,6 +4367,20 @@
                   "type": "integer"
                 },
                 "description": "Seconds until the rate limit window resets"
+              }
+            }
+          },
+          "503": {
+            "description": "email_send_rate_limit_unavailable — external delivery fails closed because recipient capacity cannot be verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "email_send_rate_limit_unavailable",
+                  "code": "email_send_rate_limit_unavailable"
+                }
               }
             }
           }
@@ -4532,7 +4562,7 @@
     "/api/v1/mailboxes/{mailboxId}/emails/{emailId}": {
       "get": {
         "summary": "Get email",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nFetches a single email with body and metadata without marking it read. Set `metadata_only=true` to omit body content, `require_scan_status=clean` to return only a clean stored message, `max_body_chars` to bound the returned body without mutating storage, and `agent_safe_content=true` to remove sensitive metadata and normalize untrusted text to bounded plain text. `include_held=true` is intended only for an explicitly scoped verification wait. All controls are optional and preserve the existing full response by default.\n\n**API credits:** 1 (read).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nFetches a single email with body and metadata without marking it read. Set `metadata_only=true` to omit body content, `require_scan_status=clean` to expose the body only for a clean stored message, `max_body_chars` to bound the returned body without mutating storage, and `agent_safe_content=true` to remove sensitive metadata and normalize untrusted text to bounded plain text. A scan-status mismatch returns safe metadata with `content_omitted` and `content_omission_reason` instead of a false not-found. `include_held=true` is intended only for an explicitly scoped verification wait. All controls are optional and preserve the existing full response by default.\n\n**API credits:** 1 (read).",
         "tags": [
           "Emails"
         ],
@@ -4584,7 +4614,7 @@
             "name": "require_scan_status",
             "in": "query",
             "required": false,
-            "description": "Return the message only when its stored scan status exactly matches. A mismatch returns 404.",
+            "description": "Expose the body only when the stored scan status exactly matches. An existing mismatch returns safe metadata with content_omitted=true.",
             "schema": {
               "type": "string",
               "enum": [
@@ -5063,6 +5093,250 @@
             "tag": "All plans",
             "title": "Delete email",
             "sidebarTitle": "Delete email"
+          }
+        }
+      }
+    },
+    "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/context": {
+      "get": {
+        "summary": "Get safe email and thread context",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nReturns the selected message plus an oldest-first, cursor-paginated thread page. This endpoint always strips sensitive transport metadata, sanitizes bodies to bounded plain text, and omits non-clean inbound bodies. Returned content remains untrusted reference data.\n\n**API credits:** 1 (read).",
+        "tags": [
+          "Emails"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mailboxId",
+            "in": "path",
+            "required": true,
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
+            "schema": {
+              "type": "string"
+            },
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          },
+          {
+            "name": "emailId",
+            "in": "path",
+            "required": true,
+            "description": "Message id from list or search results",
+            "schema": {
+              "type": "string"
+            },
+            "example": "msg_7f3a2c1b"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Thread messages per page (default 20)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque next_cursor from the preceding context page",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "include_held",
+            "in": "query",
+            "required": false,
+            "description": "Include mail held by auto-draft only for the active verification flow",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe email context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailContext"
+                },
+                "example": {
+                  "email": {
+                    "id": "msg_7f3a2c1b",
+                    "subject": "Order question",
+                    "sender": "alice@example.com",
+                    "recipient": "support@mail.acme.com",
+                    "cc": null,
+                    "bcc": null,
+                    "date": "2026-07-14T09:00:00.000Z",
+                    "read": false,
+                    "starred": false,
+                    "is_urgent": false,
+                    "category": "customer_support",
+                    "body": "Hi, where is my order?",
+                    "folder_id": "INBOX",
+                    "folder_name": "Inbox",
+                    "thread_id": "thr_9aabb",
+                    "snippet": "Hi, where is my order?",
+                    "scan_status": null,
+                    "attachments": []
+                  },
+                  "thread": {
+                    "id": "thread_7f3a2c1b",
+                    "messages": [
+                      {
+                        "id": "msg_7f3a2c1b",
+                        "subject": "Order question",
+                        "sender": "alice@example.com",
+                        "recipient": "support@mail.acme.com",
+                        "cc": null,
+                        "bcc": null,
+                        "date": "2026-07-14T09:00:00.000Z",
+                        "read": false,
+                        "starred": false,
+                        "is_urgent": false,
+                        "category": "customer_support",
+                        "body": "Hi, where is my order?",
+                        "folder_id": "INBOX",
+                        "folder_name": "Inbox",
+                        "thread_id": "thr_9aabb",
+                        "snippet": "Hi, where is my order?",
+                        "scan_status": null,
+                        "attachments": []
+                      }
+                    ],
+                    "total_count": 1,
+                    "has_more": false,
+                    "next_cursor": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid limit or cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid cursor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked API key / token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "API credits exhausted for this workspace period",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — plan gate, wrong workspace, or missing role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Forbidden"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Email not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Email not found"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the rate limit window resets"
+              }
+            }
+          }
+        },
+        "operationId": "getEmailContext",
+        "x-credits": 1,
+        "x-badges": [
+          {
+            "name": "Free",
+            "color": "green"
+          },
+          {
+            "name": "Developer",
+            "color": "blue"
+          },
+          {
+            "name": "Enterprise",
+            "color": "purple"
+          }
+        ],
+        "x-plan-access": [
+          "free",
+          "developer",
+          "enterprise"
+        ],
+        "x-mint": {
+          "metadata": {
+            "tag": "All plans",
+            "title": "Get safe email and thread context",
+            "sidebarTitle": "Get safe email and thread context"
           }
         }
       }
@@ -5726,7 +6000,7 @@
     "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/reply": {
       "post": {
         "summary": "Reply to email",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSends a reply. Server injects `in_reply_to`, `references`, and `thread_id` from the original message.\n\n**API credits:** 5 (email_send).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSends a reply. Server injects `in_reply_to`, `references`, and `thread_id` from the original message. Free external recipient limits count every To+Cc+Bcc address; respect `Retry-After` and do not auto-retry writes.\n\n**API credits:** 5 (email_send).",
         "tags": [
           "Emails"
         ],
@@ -5768,6 +6042,29 @@
                 "example": {
                   "id": "msg_reply01",
                   "status": "sent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, including email_send_recipient_limit_exceeded when a Free external send has more than 10 total To+Cc+Bcc recipients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "recipientLimit": {
+                    "value": {
+                      "error": "email_send_recipient_limit_exceeded",
+                      "code": "email_send_recipient_limit_exceeded"
+                    }
+                  },
+                  "validation": {
+                    "value": {
+                      "error": "Invalid request"
+                    }
+                  }
                 }
               }
             }
@@ -5825,14 +6122,15 @@
             }
           },
           "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "description": "Workspace RPM or external recipient window exceeded. email_send_rate_limit_exceeded is not safe for automatic write replay; Free windows are 10 recipient units/minute, 50/hour, and 200/day.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
                 "example": {
-                  "error": "Too many requests"
+                  "error": "email_send_rate_limit_exceeded",
+                  "code": "email_send_rate_limit_exceeded"
                 }
               }
             },
@@ -5842,6 +6140,20 @@
                   "type": "integer"
                 },
                 "description": "Seconds until the rate limit window resets"
+              }
+            }
+          },
+          "503": {
+            "description": "email_send_rate_limit_unavailable — external delivery fails closed because recipient capacity cannot be verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "email_send_rate_limit_unavailable",
+                  "code": "email_send_rate_limit_unavailable"
+                }
               }
             }
           }
@@ -6023,7 +6335,7 @@
     "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/forward": {
       "post": {
         "summary": "Forward email",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nForwards an existing email to new recipients.\n\n**API credits:** 5 (email_send).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nForwards an existing email to new recipients. Free external recipient limits count every To+Cc+Bcc address; respect `Retry-After` and do not auto-retry writes.\n\n**API credits:** 5 (email_send).",
         "tags": [
           "Emails"
         ],
@@ -6069,6 +6381,29 @@
               }
             }
           },
+          "400": {
+            "description": "Validation error, including email_send_recipient_limit_exceeded when a Free external send has more than 10 total To+Cc+Bcc recipients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "recipientLimit": {
+                    "value": {
+                      "error": "email_send_recipient_limit_exceeded",
+                      "code": "email_send_recipient_limit_exceeded"
+                    }
+                  },
+                  "validation": {
+                    "value": {
+                      "error": "Invalid request"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid, expired, or revoked API key / token",
             "content": {
@@ -6109,14 +6444,15 @@
             }
           },
           "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "description": "Workspace RPM or external recipient window exceeded. email_send_rate_limit_exceeded is not safe for automatic write replay; Free windows are 10 recipient units/minute, 50/hour, and 200/day.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
                 "example": {
-                  "error": "Too many requests"
+                  "error": "email_send_rate_limit_exceeded",
+                  "code": "email_send_rate_limit_exceeded"
                 }
               }
             },
@@ -6126,6 +6462,20 @@
                   "type": "integer"
                 },
                 "description": "Seconds until the rate limit window resets"
+              }
+            }
+          },
+          "503": {
+            "description": "email_send_rate_limit_unavailable — external delivery fails closed because recipient capacity cannot be verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "email_send_rate_limit_unavailable",
+                  "code": "email_send_rate_limit_unavailable"
+                }
               }
             }
           }
@@ -6812,7 +7162,7 @@
     "/api/v1/mailboxes/{mailboxId}/scheduled-sends": {
       "post": {
         "summary": "Schedule send",
-        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSchedules an outbound email for a future time. Uses draft-style fields (`body`, `scheduled_send_at`) rather than send-email `html`/`text`. Returns **201**.\n\n**API credits:** 5 (email_send).",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nSchedules an outbound email for a future time. Uses draft-style fields (`body`, `scheduled_send_at`) rather than send-email `html`/`text`. Free validates the 10-recipient request cap now but consumes rolling recipient quota at delivery; a rolling-limit failure restores the item to scheduled/deferred rather than sent. Returns **201**.\n\n**API credits:** 5 (email_send).",
         "tags": [
           "Emails"
         ],
@@ -6849,6 +7199,29 @@
                   "subject": "Later",
                   "recipient": "hello@example.com",
                   "scheduled_send_at": "2026-07-16T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, including email_send_recipient_limit_exceeded when a Free external send has more than 10 total To+Cc+Bcc recipients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "recipientLimit": {
+                    "value": {
+                      "error": "email_send_recipient_limit_exceeded",
+                      "code": "email_send_recipient_limit_exceeded"
+                    }
+                  },
+                  "validation": {
+                    "value": {
+                      "error": "Invalid request"
+                    }
+                  }
                 }
               }
             }
@@ -6893,14 +7266,15 @@
             }
           },
           "429": {
-            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "description": "Workspace RPM or external recipient window exceeded. email_send_rate_limit_exceeded is not safe for automatic write replay; Free windows are 10 recipient units/minute, 50/hour, and 200/day.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
                 "example": {
-                  "error": "Too many requests"
+                  "error": "email_send_rate_limit_exceeded",
+                  "code": "email_send_rate_limit_exceeded"
                 }
               }
             },
@@ -6910,6 +7284,20 @@
                   "type": "integer"
                 },
                 "description": "Seconds until the rate limit window resets"
+              }
+            }
+          },
+          "503": {
+            "description": "email_send_rate_limit_unavailable — external delivery fails closed because recipient capacity cannot be verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "email_send_rate_limit_unavailable",
+                  "code": "email_send_rate_limit_unavailable"
+                }
               }
             }
           }
@@ -10898,6 +11286,142 @@
             "tag": "All plans",
             "title": "Delete task triager",
             "sidebarTitle": "Delete task triager"
+          }
+        }
+      }
+    },
+    "/api/v1/mailboxes/{mailboxId}/task-triagers/{triagerId}/default": {
+      "post": {
+        "summary": "Set default task triager",
+        "description": "**Plans:** `Free` · `Developer` · `Enterprise`\n\nMarks a triager as the mailbox default (clears the previous default).\n\n**API credits:** 2 (write).",
+        "tags": [
+          "Task triage"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mailboxId",
+            "in": "path",
+            "required": true,
+            "description": "Mailbox public_id (UUID), hosted alias id, or current email",
+            "schema": {
+              "type": "string"
+            },
+            "example": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          },
+          {
+            "name": "triagerId",
+            "in": "path",
+            "required": true,
+            "description": "Triager id",
+            "schema": {
+              "type": "string"
+            },
+            "example": "tr_01"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked API key / token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "API credits exhausted for this workspace period",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — plan gate, wrong workspace, or missing role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Forbidden"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (workspace RPM or email send limits)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the rate limit window resets"
+              }
+            }
+          }
+        },
+        "x-credits": 2,
+        "x-badges": [
+          {
+            "name": "Free",
+            "color": "green"
+          },
+          {
+            "name": "Developer",
+            "color": "blue"
+          },
+          {
+            "name": "Enterprise",
+            "color": "purple"
+          }
+        ],
+        "x-plan-access": [
+          "free",
+          "developer",
+          "enterprise"
+        ],
+        "x-mint": {
+          "metadata": {
+            "tag": "All plans",
+            "title": "Set default task triager",
+            "sidebarTitle": "Set default task triager"
           }
         }
       }
@@ -15150,97 +15674,6 @@
           }
         }
       }
-    },
-    "/api/v1/mailboxes/{mailboxId}/emails/{emailId}/context": {
-      "get": {
-        "summary": "Get safe email and thread context",
-        "description": "Return the selected message plus an oldest-first, cursor-paginated thread page. The endpoint strips sensitive transport metadata, sanitizes bodies to bounded plain text, and omits non-clean inbound bodies. Returned content remains untrusted reference data.",
-        "tags": [
-          "Emails"
-        ],
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "mailboxId",
-            "in": "path",
-            "required": true,
-            "description": "Mailbox public_id from mailboxes list is preferred",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "emailId",
-            "in": "path",
-            "required": true,
-            "description": "Email id from emails list or search",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Maximum messages in this oldest-first thread page",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "description": "Opaque next_cursor from the preceding context page",
-            "schema": {
-              "type": "string",
-              "maxLength": 2048
-            }
-          },
-          {
-            "name": "include_held",
-            "in": "query",
-            "required": false,
-            "description": "Include held mail only for the active verification flow",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Safe email context",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid limit or cursor"
-          },
-          "404": {
-            "description": "Email not found"
-          }
-        },
-        "x-credits": 1,
-        "x-plan-access": [
-          "free",
-          "developer",
-          "enterprise"
-        ]
-      }
     }
   },
   "components": {
@@ -15828,7 +16261,14 @@
           },
           "content_omitted": {
             "type": "boolean",
-            "description": "True when metadata_only omitted body, snippet, raw headers, and threat URLs"
+            "description": "True when metadata_only or an agent-safe scan gate omitted body, snippet, raw headers, and threat URLs"
+          },
+          "content_omission_reason": {
+            "type": "string",
+            "enum": [
+              "scan_status_not_clean"
+            ],
+            "description": "Why an agent-safe detail or context response omitted body content"
           },
           "content_truncated": {
             "type": "boolean",
@@ -15863,6 +16303,55 @@
             "type": "integer"
           }
         }
+      },
+      "EmailContext": {
+        "type": "object",
+        "required": [
+          "email",
+          "thread"
+        ],
+        "description": "Always-safe selected email and chronological thread page. Bodies are bounded plain text, sensitive transport metadata is removed, and non-clean inbound bodies are metadata-only. Content remains untrusted.",
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/Email"
+          },
+          "thread": {
+            "type": "object",
+            "required": [
+              "id",
+              "messages",
+              "total_count",
+              "has_more",
+              "next_cursor"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Email"
+                }
+              },
+              "total_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       },
       "SendEmailResult": {
         "type": "object",

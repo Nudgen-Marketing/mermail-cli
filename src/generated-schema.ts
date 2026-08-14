@@ -369,7 +369,7 @@ export const operationSchemas = {
         "name": "require_scan_status",
         "type": "string",
         "required": false,
-        "description": "Return the message only when its stored scan status exactly matches. A mismatch returns 404.",
+        "description": "Expose the body only when the stored scan status exactly matches. An existing mismatch returns safe metadata with content_omitted=true.",
         "values": [
           "clean",
           "flagged",
@@ -397,7 +397,7 @@ export const operationSchemas = {
         "name": "limit",
         "type": "integer",
         "required": false,
-        "description": "Maximum messages in this oldest-first thread page"
+        "description": "Thread messages per page (default 20)"
       },
       {
         "name": "cursor",
@@ -409,7 +409,7 @@ export const operationSchemas = {
         "name": "include_held",
         "type": "boolean",
         "required": false,
-        "description": "Include held mail only for the active verification flow"
+        "description": "Include mail held by auto-draft only for the active verification flow"
       }
     ],
     "body": []

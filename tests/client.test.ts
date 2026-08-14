@@ -97,4 +97,21 @@ describe("client", () => {
     await expect(apiRequest(resolveClientOptions({ apiKey: "sk-proj-test" }), { method: "POST", path: "/api/v1/mailboxes", body: {} })).rejects.toBeInstanceOf(CliError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("surfaces external email recipient Retry-After without replaying the write", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(
+      { error: "email_send_rate_limit_exceeded", code: "email_send_rate_limit_exceeded" },
+      { status: 429, headers: { "retry-after": "42" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiRequest(
+      resolveClientOptions({ apiKey: "sk-proj-test" }),
+      { method: "POST", path: "/api/v1/mailboxes/mailbox-1/emails", body: { to: "a@example.com" } },
+    )).rejects.toMatchObject({
+      status: 429,
+      code: "email_send_rate_limit_exceeded",
+      retryAfterMs: 42_000,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

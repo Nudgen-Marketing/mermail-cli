@@ -128,6 +128,74 @@ describe("mcpRequest oauth bearer", () => {
       );
     }
   });
+
+  it("accepts a stateless MCP JSON-RPC result delivered as an event stream", async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n');
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    try {
+      const payload = await mcpRequest(
+        { baseUrl: `http://127.0.0.1:${address.port}`, timeout: 5_000 },
+        { jsonrpc: "2.0", id: 1, method: "ping" },
+        { auth: "oauth", accessToken: "mcp_at_test" },
+      );
+      expect(payload.result.ok).toBe(true);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("selects the matching JSON-RPC result when an SSE notification follows it", async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(
+        'event: message\ndata: {"jsonrpc":"2.0","id":7,"result":{"ok":true}}\n\n' +
+        'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}\n\n',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    try {
+      const payload = await mcpRequest(
+        { baseUrl: `http://127.0.0.1:${address.port}`, timeout: 5_000 },
+        { jsonrpc: "2.0", id: 7, method: "ping" },
+        { auth: "oauth", accessToken: "mcp_at_test" },
+      );
+      expect(payload.result.ok).toBe(true);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("rejects a successful MCP response with no JSON-RPC payload", async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end("event: ping\n\n");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    try {
+      await expect(mcpRequest(
+        { baseUrl: `http://127.0.0.1:${address.port}`, timeout: 5_000 },
+        { jsonrpc: "2.0", id: 1, method: "ping" },
+        { auth: "oauth", accessToken: "mcp_at_test" },
+      )).rejects.toMatchObject({ code: "invalid_response", status: 200 });
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
 });
 
 describe("wallet mcp helpers", () => {

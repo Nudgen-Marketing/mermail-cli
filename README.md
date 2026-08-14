@@ -92,7 +92,7 @@ Raw/full output remains the default for compatibility. For agent verification, c
 
 **Sold API mail/workspace commands** use `MERMAIL_API_KEY` (or `--api-key`). The CLI does not store API keys.
 
-**Agent Wallet** uses MCP OAuth instead. API keys never unlock PayBox / Agent Wallet tools.
+**Agent Wallet** uses MCP OAuth instead. API keys never unlock PayBox / Agent Wallet tools. The CLI's current `wallet` commands are legacy owner-only operations; current workspace members can use model-visible live `paybox_*` through the owner's active connection in a full-profile MCP host, but the CLI does not expose direct transfer, swap, or x402 commands.
 
 ```bash
 # Interactive browser PKCE login (stores tokens in ~/.config/mermail/mcp-oauth.json, mode 0600)
@@ -138,11 +138,15 @@ For mailbox-first verification and read-only inbox workflows, hosted Claude and 
 
 MCP filters are structured objects, not JSON-encoded strings. For example, call `list_emails` with `query: { "folder": "inbox", "limit": 1, "sortColumn": "date", "sortDirection": "DESC" }`. The equivalent CLI flags are `--folder inbox --limit 1 --sort-column date --sort-direction DESC`.
 
+MCP requests use stateless POST. The CLI accepts both `application/json` and `text/event-stream` JSON-RPC results; an authenticated GET returning `405` is expected and is not a replacement for `initialize` plus `tools/list`.
+
 After selecting one unambiguous message, `mermail emails context --mailbox-id ... --email-id ...` returns its sanitized message plus a bounded oldest-first thread page. Follow `next_cursor` only when more context is needed. The Agent Inbox MCP profile contains exactly 12 tools, including `get_email_context`.
 
 The CLI intentionally does not expose workspace deletion or selecting a default task triager. Workspace deletion is disabled, and task triagers operate independently without a CLI default-selection workflow.
 
 Destructive commands prompt in an interactive terminal and require `--yes` in non-interactive environments. Write, send, delete, and wallet submit requests are never retried automatically.
+
+Free external API sends count all To+Cc+Bcc addresses and allow at most 10 recipients/request, 10 recipient units/minute, 50/hour, and 200/day. `email_send_recipient_limit_exceeded` requires a newly approved recipient set; `email_send_rate_limit_exceeded` includes `retryAfterMs` and is not auto-retried; `email_send_rate_limit_unavailable` fails closed. A scheduled message deferred by rolling quota remains scheduled and must not be reported as sent. Developer and Enterprise bypass this special recipient limiter but still use normal RPM, credit, and email quotas.
 
 ## Development
 
