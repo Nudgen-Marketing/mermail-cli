@@ -6,6 +6,38 @@ on:
 permissions:
   contents: read
 jobs:
+  release-version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Require a version bump for publishable CLI changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          if ! grep -Eq '^(src/|spec/|README\.md$|LICENSE$|package\.json$|package-lock\.json$)' <<< "$CHANGED"; then
+            exit 0
+          fi
+          BASE_VERSION="$(git show "$BASE_SHA:package.json" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s).version))")"
+          CURRENT_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$BASE_VERSION" == "$CURRENT_VERSION" ]]; then
+            echo "Publishable CLI changes require a package.json/package-lock.json version bump." >&2
+            exit 1
+          fi
+          LOCK_VERSION="$(node -p "require('./package-lock.json').packages[''].version")"
+          if [[ "$LOCK_VERSION" != "$CURRENT_VERSION" ]]; then
+            echo "package-lock.json version must match package.json." >&2
+            exit 1
+          fi
+
   test:
     strategy:
       matrix:

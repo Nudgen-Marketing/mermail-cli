@@ -1,40 +1,159 @@
 name: Release
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "spec/**"
+      - "README.md"
+      - "LICENSE"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
       version:
         description: Semver version without v prefix
         required: true
+
 permissions:
   contents: write
   id-token: write
+
+concurrency:
+  # The main-branch run creates the release tag itself. Keep every invocation in
+  # one lane so a manual retry cannot race npm publish or GitHub Release creation.
+  group: cli-release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Resolve and validate release version
+        id: release
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+          RELEASE_ORCHESTRATOR_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            [[ "$GITHUB_REF_NAME" == "v${VERSION}" ]] || { echo "Tag must use vX.Y.Z" >&2; exit 1; }
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            VERSION="$(node -p "require('./package.json').version")"
+          else
+            VERSION="$MANUAL_VERSION"
+          fi
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid semver: $VERSION" >&2
+            exit 1
+          }
+          [[ -n "$RELEASE_ORCHESTRATOR_TOKEN" ]] || { echo "Missing secret RELEASE_ORCHESTRATOR_TOKEN" >&2; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
       - run: npm ci
       - name: Verify release version
-        run: test "$(node -p "require('./package.json').version")" = "${{ inputs.version }}"
-      - run: npm run check
-      - name: Tag the exact versioned source commit
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
+          test "$(node -p "require('./package.json').version")" = "$VERSION"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "$VERSION"
+      - run: npm run check
+
+      - name: Tag the exact versioned source commit
+        if: github.ref_type != 'tag'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --tags origin "refs/tags/v${{ inputs.version }}"; then
-            git fetch origin "refs/tags/v${{ inputs.version }}:refs/tags/v${{ inputs.version }}"
-            test "$(git show "v${{ inputs.version }}:package.json" | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s).version))")" = "${{ inputs.version }}"
-            git checkout --detach "v${{ inputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA" || {
+              echo "$TAG already points to a different commit" >&2
+              exit 1
+            }
+            test "$(git show "$TAG:package.json" | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s).version))")" = "$VERSION"
           else
-            git tag -a "v${{ inputs.version }}" -m "v${{ inputs.version }}"
-            git push origin "v${{ inputs.version }}"
+            git tag -a "$TAG" -m "$TAG"
+            git push origin "$TAG"
           fi
-      - run: npm publish --provenance --access public
-      - env:
+
+      - name: Check whether npm version already exists
+        id: npm
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$(npm view "mermail-cli@$VERSION" version 2>/dev/null || true)" == "$VERSION" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm package with provenance
+        if: steps.npm.outputs.published != 'true'
+        run: npm publish --provenance --access public
+
+      - name: Verify npm release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..6}; do
+            if [[ "$(npm view "mermail-cli@$VERSION" version 2>/dev/null || true)" == "$VERSION" ]]; then
+              exit 0
+            fi
+            [[ "$attempt" -eq 6 ]] && exit 1
+            sleep 5
+          done
+
+      - name: Create GitHub release if needed
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ inputs.version }}" --generate-notes
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --generate-notes --verify-tag
+          fi
+
+      - name: Dispatch released CLI contract to mermail-skills
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
+          CLI_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg event_type "mermail-cli-released" \
+            --arg cli_version "$CLI_VERSION" \
+            --arg source_repository "$SOURCE_REPOSITORY" \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg source_run_url "$SOURCE_RUN_URL" \
+            '{
+              event_type: $event_type,
+              client_payload: {
+                cli_version: $cli_version,
+                source_repository: $source_repository,
+                source_sha: $source_sha,
+                source_run_url: $source_run_url,
+                trigger: "cli-release"
+              }
+            }' \
+            | gh api --method POST repos/Nudgen-Marketing/mermail-skills/dispatches --input -

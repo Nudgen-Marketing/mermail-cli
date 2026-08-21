@@ -1,6 +1,6 @@
 {
   "name": "mermail-cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Official command-line interface for the Mermail API and MCP server",
   "keywords": ["mermail", "email", "ai-agent", "cli", "mcp"],
   "repository": { "type": "git", "url": "git+https://github.com/Nudgen-Marketing/mermail-cli.git" },

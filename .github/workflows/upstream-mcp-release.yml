@@ -1,0 +1,143 @@
+name: Validate upstream MCP release
+
+on:
+  repository_dispatch:
+    types: [mermail-mcp-released]
+  workflow_dispatch:
+    inputs:
+      mcp_version:
+        description: Released MCP semver
+        required: true
+      source_sha:
+        description: Source commit SHA from Nudgen-Marketing/mermail
+        required: true
+      source_run_url:
+        description: Optional upstream workflow URL
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-mcp-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      MCP_VERSION: ${{ github.event.client_payload.mcp_version || inputs.mcp_version }}
+      SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || 'Nudgen-Marketing/mermail' }}
+      SOURCE_SHA: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
+      SOURCE_RUN_URL: ${{ github.event.client_payload.source_run_url || inputs.source_run_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Validate dispatch payload and forwarding credential
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_ORCHESTRATOR_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$MCP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid MCP semver: $MCP_VERSION" >&2
+            exit 1
+          }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source SHA" >&2; exit 1; }
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            [[ "$SOURCE_REPOSITORY" == "Nudgen-Marketing/mermail" ]] || { echo "Unexpected source repository" >&2; exit 1; }
+            [[ "$SOURCE_RUN_URL" =~ ^https://github\.com/Nudgen-Marketing/mermail/actions/runs/[0-9]+$ ]] || {
+              echo "Invalid source workflow URL" >&2
+              exit 1
+            }
+          fi
+          [[ -n "$RELEASE_ORCHESTRATOR_TOKEN" ]] || { echo "Missing secret RELEASE_ORCHESTRATOR_TOKEN" >&2; exit 1; }
+
+      - run: npm ci
+
+      - name: Validate CLI against the deployed MCP and tracked OpenAPI
+        id: contract
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm run validate:remote
+          OPENAPI_SOURCE=spec/openapi.json npm run sync:openapi
+          git diff --exit-code -- spec/openapi.json src/generated-schema.ts
+
+      - name: Open or update CLI synchronization issue
+        if: steps.contract.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="[automation] MCP v${MCP_VERSION} requires mermail-cli synchronization"
+          NUMBER="$(gh issue list --state open --limit 100 --json number,title \
+            --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)"
+          BODY="$RUNNER_TEMP/upstream-mcp-release.md"
+          {
+            echo "Mermail MCP \`v${MCP_VERSION}\` did not pass the CLI compatibility gate."
+            echo
+            echo "- Source repository: \`${SOURCE_REPOSITORY}\`"
+            echo "- Source commit: \`${SOURCE_SHA}\`"
+            if [[ -n "$SOURCE_RUN_URL" ]]; then echo "- Upstream workflow: ${SOURCE_RUN_URL}"; fi
+            echo "- Receiver workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "Review the remote contract failure. If CLI schemas must change, update the approved OpenAPI snapshot, regenerate it with an explicit \`OPENAPI_SOURCE\`, bump \`package.json\` and \`package-lock.json\`, then merge the fix. The CLI release workflow will continue the chain to mermail-skills."
+          } > "$BODY"
+          if [[ -n "$NUMBER" ]]; then
+            gh issue edit "$NUMBER" --body-file "$BODY"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY"
+          fi
+
+      - name: Close resolved CLI synchronization issue
+        if: steps.contract.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="[automation] MCP v${MCP_VERSION} requires mermail-cli synchronization"
+          NUMBER="$(gh issue list --state open --limit 100 --json number,title \
+            --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)"
+          if [[ -n "$NUMBER" ]]; then
+            gh issue close "$NUMBER" --comment "The deployed MCP contract now passes CLI validation."
+          fi
+
+      - name: Stop the chain when CLI synchronization is required
+        if: steps.contract.outcome != 'success'
+        run: exit 1
+
+      - name: Dispatch compatible contract to mermail-skills
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
+        run: |
+          set -euo pipefail
+          CLI_VERSION="$(node -p "require('./package.json').version")"
+          SOURCE_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          jq -n \
+            --arg event_type "mermail-cli-compatible" \
+            --arg mcp_version "$MCP_VERSION" \
+            --arg mcp_source_sha "$SOURCE_SHA" \
+            --arg cli_version "$CLI_VERSION" \
+            --arg source_repository "$GITHUB_REPOSITORY" \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg source_run_url "$SOURCE_RUN" \
+            '{
+              event_type: $event_type,
+              client_payload: {
+                mcp_version: $mcp_version,
+                mcp_source_sha: $mcp_source_sha,
+                cli_version: $cli_version,
+                source_repository: $source_repository,
+                source_sha: $source_sha,
+                source_run_url: $source_run_url,
+                trigger: "mcp-compatible"
+              }
+            }' \
+            | gh api --method POST repos/Nudgen-Marketing/mermail-skills/dispatches --input -
