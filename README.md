@@ -4,15 +4,14 @@ Official automation-first CLI for the Mermail Sold API and hosted MCP server.
 
 ## Install
 
-Until the package is on the public npm registry, install from GitHub:
+Install the public npm package:
 
 ```bash
-npm install -g github:Nudgen-Marketing/mermail-cli
-# or one-shot: npx --yes github:Nudgen-Marketing/mermail-cli --help
+npm install -g mermail-cli
 export MERMAIL_API_KEY="sk-proj-your-key"
 ```
 
-Requires Node.js 22 or newer. After npm publish, `npm install -g mermail-cli` will work the same way.
+Requires Node.js 22 or newer. For a one-shot run, use `npx --yes mermail-cli --help`.
 
 ## Examples
 
