@@ -1,6 +1,6 @@
 {
   "name": "mermail-cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Official command-line interface for the Mermail API and MCP server",
   "keywords": ["mermail", "email", "ai-agent", "cli", "mcp"],
   "repository": { "type": "git", "url": "git+https://github.com/Nudgen-Marketing/mermail-cli.git" },
@@ -21,6 +21,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
+    "prepare": "npm run build",
     "dev": "tsx src/index.ts",
     "sync:openapi": "node --import tsx scripts/sync-openapi.ts",
     "validate:openapi": "OPENAPI_SOURCE=spec/openapi.json node --import tsx scripts/sync-openapi.ts",
