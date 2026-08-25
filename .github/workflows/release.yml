@@ -1,40 +1,100 @@
 name: Release
+
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Semver version without v prefix
-        required: true
-permissions:
-  contents: write
-  id-token: write
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm ci
-      - name: Verify release version
-        run: test "$(node -p "require('./package.json').version")" = "${{ inputs.version }}"
-      - run: npm run check
-      - name: Tag the exact versioned source commit
+          package-manager-cache: false
+
+      - name: Resolve release version
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --tags origin "refs/tags/v${{ inputs.version }}"; then
-            git fetch origin "refs/tags/v${{ inputs.version }}:refs/tags/v${{ inputs.version }}"
-            test "$(git show "v${{ inputs.version }}:package.json" | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s).version))")" = "${{ inputs.version }}"
-            git checkout --detach "v${{ inputs.version }}"
-          else
-            git tag -a "v${{ inputs.version }}" -m "v${{ inputs.version }}"
-            git push origin "v${{ inputs.version }}"
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Publishes must run from a v* tag push."
+            exit 1
           fi
-      - run: npm publish --provenance --access public
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Release tags must use vX.Y.Z SemVer."
+            exit 1
+          }
+          echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+
+      - name: Verify the tagged commit is on main
+        run: |
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::The release tag must point to a commit reachable from main."
+            exit 1
+          }
+
+      - run: npm ci
+
+      - name: Verify release version
+        run: test "$(node -p "require('./package.json').version")" = "$RELEASE_VERSION"
+
+      - run: npm run check
+
+      - name: Audit published dependency set
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check package immutability
+        id: package
+        run: |
+          set -euo pipefail
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP" > "$RUNNER_TEMP/npm-pack.json"
+          LOCAL_INTEGRITY="$(node -p "JSON.parse(require('node:fs').readFileSync(process.env.RUNNER_TEMP + '/npm-pack.json', 'utf8'))[0].integrity")"
+          if REMOTE_INTEGRITY="$(npm view "mermail-cli@$RELEASE_VERSION" dist.integrity 2>/dev/null)"; then
+            if [[ "$LOCAL_INTEGRITY" != "$REMOTE_INTEGRITY" ]]; then
+              echo "::error::mermail-cli@$RELEASE_VERSION already exists with different package contents. Bump the version."
+              exit 1
+            fi
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "The identical package version already exists; skipping the immutable npm publish step."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.package.outputs.already_published != 'true'
+        run: npm publish --provenance --access public
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ inputs.version }}" --generate-notes
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --latest
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --latest --title "$RELEASE_TAG"
+          fi
