@@ -155,6 +155,23 @@ npm run check
 npm run validate:remote
 ```
 
+## Publishing to npm
+
+Releases use [`.github/workflows/release.yml`](./.github/workflows/release.yml) with npm trusted publishing, so GitHub does not need a long-lived `NPM_TOKEN`.
+
+Configure the `mermail-cli` package's trusted publisher on npm once:
+
+- Provider: **GitHub Actions**
+- Organization: **Nudgen-Marketing**
+- Repository: **mermail-cli**
+- Workflow filename: **release.yml**
+- Environment: **npm**
+- Allowed action: **npm publish**
+
+Protect the GitHub `npm` environment with required reviewers. For a release, bump both `package.json` and `package-lock.json`, merge to `main`, then push the matching `vX.Y.Z` tag. The workflow verifies that the tag is valid, matches the package version, and points to a commit on `main`; it then runs the full check, audits production dependencies, publishes with provenance, and creates the GitHub release.
+
+After one successful OIDC release, revoke any old npm automation token and enable npm's option to disallow token-based publishing.
+
 The checked-in operation manifest intentionally exposes 70 supported Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
 
 ## License
