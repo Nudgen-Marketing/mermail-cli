@@ -14,7 +14,12 @@ import {
   redactOauthSession,
 } from "./oauth.js";
 import { printError, printOutput, type OutputFormat } from "./output.js";
-import { callWalletTool, submitWalletTransfer } from "./wallet.js";
+import {
+  callWalletTool,
+  classifyPayboxResult,
+  selectPayboxCredential,
+  submitWalletTransfer,
+} from "./wallet.js";
 import {
   DEFAULT_EMAIL_POLL_INTERVAL,
   DEFAULT_EMAIL_WAIT_TIMEOUT,
@@ -150,7 +155,7 @@ groups.get("mailboxes")!
   });
 
 function registerOperation(group: Command, operation: Operation) {
-  const command = group.command(operation.action).description(`${operation.method} ${operation.path}`);
+  const command = group.command(operation.action).description(operation.description ?? `${operation.method} ${operation.path}`);
   const schema = schemas[operation.tool]!;
   const registered = new Set<string>();
   for (const param of operation.params ?? []) command.requiredOption(`--${kebab(param)} <value>`, `${param} path parameter`);
@@ -167,6 +172,12 @@ function registerOperation(group: Command, operation: Operation) {
   if (!["GET", "DELETE"].includes(operation.method)) command.option("--data <json>", "JSON request body").option("--data-file <path>", "JSON body file; use - for stdin").option("--idempotency-key <key>", "credit-ledger idempotency key");
   command.option("--output-file <path>", "write response to a file");
   if (operation.destructive) command.option("--yes", "confirm destructive action for automation");
+  if (operation.tool === "update_mailbox_settings") {
+    command.addHelpText("after", "\nAgent response modes are draft_for_review and automatic_triage. Changing mailbox policy requires workspace admin access; verification inboxes must keep automations disabled.\n");
+  }
+  if (operation.tool === "delete_folder") {
+    command.addHelpText("after", "\nOnly custom folders can be deleted. Messages in the folder move to Trash; the response reports movedToTrashCount.\n");
+  }
   command.action(async (local: Record<string, any>, current: Command) => runOperation(operation, local, current.optsWithGlobals()));
 }
 
@@ -481,6 +492,96 @@ walletTransfer
     }
   });
 
+const paybox = wallet.command("paybox").description("Live Agent Wallet catalog via MCP OAuth");
+paybox.command("connection")
+  .description("Probe the live Agent Wallet connection and return any exact handoff")
+  .action(async (_local: unknown, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({ client, cliVersion: packageJson.version, toolName: "get_paybox_connection", requiredScopes: ["mcp:tools"], arguments: {} });
+    await printOutput(data, outputFormat(current));
+  });
+paybox.command("credentials")
+  .description("List live wallet credentials, chains, and approval modes")
+  .action(async (_local: unknown, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({ client, cliVersion: packageJson.version, toolName: "paybox_list_credentials", requiredScopes: ["mcp:tools"], arguments: {} });
+    await printOutput(data, outputFormat(current));
+  });
+paybox.command("portfolio")
+  .description("Read the live Agent Wallet portfolio")
+  .option("--chain <chain>", "chain family or CAIP-2 chain id")
+  .option("--network-id <id>", "network id; repeatable", collect, [])
+  .action(async (local: Record<string, any>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const args = {
+      ...(local.chain ? { chain: local.chain } : {}),
+      ...(local.networkId?.length ? { network_ids: local.networkId } : {}),
+    };
+    const data = await callWalletTool({ client, cliVersion: packageJson.version, toolName: "paybox_get_portfolio", requiredScopes: ["mcp:tools"], arguments: args });
+    await printOutput(data, outputFormat(current));
+  });
+paybox.command("request")
+  .description("Read one existing Agent Wallet request exactly once")
+  .requiredOption("--request-id <id>", "request id, including any mermail-execution- prefix")
+  .action(async (local: Record<string, string>, current: Command) => {
+    const client = resolveClientOptions(current.optsWithGlobals());
+    const data = await callWalletTool({ client, cliVersion: packageJson.version, toolName: "paybox_get_request", requiredScopes: ["mcp:tools"], arguments: { request_id: local.requestId } });
+    await printOutput(classifyPayboxResult(data), outputFormat(current));
+  });
+paybox.command("transfer")
+  .description("Submit one live token transfer after confirmation")
+  .option("--credential-id <id>", "exact wallet credential; never substituted")
+  .requiredOption("--chain <chain>", "chain family or CAIP-2 chain id")
+  .requiredOption("--token <token>", "asset identifier or native")
+  .requiredOption("--amount <amount>", "human decimal amount for known assets")
+  .requiredOption("--to <address>", "destination address")
+  .option("--data <json>", "additional live catalog arguments")
+  .option("--yes", "skip interactive confirmation (required in non-interactive mode)")
+  .action(async (local: Record<string, any>, current: Command) => {
+    await runPayboxWrite("paybox_request_transfer", {
+      ...(local.data ? parseJson(local.data) : {}),
+      chain: local.chain,
+      token: local.token,
+      amount: local.amount,
+      to: local.to,
+      ...(local.credentialId ? { credential_id: local.credentialId } : {}),
+    }, local, current);
+  });
+paybox.command("swap")
+  .description("Submit one live asset swap after confirmation")
+  .option("--credential-id <id>", "exact wallet credential; never substituted")
+  .requiredOption("--src-chain <chain>", "source chain family or CAIP-2 chain id")
+  .requiredOption("--src-token <token>", "source asset identifier")
+  .requiredOption("--dst-token <token>", "destination asset identifier")
+  .requiredOption("--amount <amount>", "source amount")
+  .option("--data <json>", "additional live catalog arguments")
+  .option("--yes", "skip interactive confirmation (required in non-interactive mode)")
+  .action(async (local: Record<string, any>, current: Command) => {
+    await runPayboxWrite("paybox_request_swap", {
+      ...(local.data ? parseJson(local.data) : {}),
+      src_chain: local.srcChain,
+      src_token: local.srcToken,
+      dst_token: local.dstToken,
+      amount: local.amount,
+      ...(local.credentialId ? { credential_id: local.credentialId } : {}),
+    }, local, current);
+  });
+paybox.command("x402")
+  .description("Submit one payment for an explicitly selected x402 requirement")
+  .option("--credential-id <id>", "exact wallet credential; never substituted")
+  .requiredOption("--accepts <json>", "selected x402 accepts object")
+  .requiredOption("--resource <json>", "selected x402 resource object")
+  .option("--data <json>", "additional live catalog arguments")
+  .option("--yes", "skip interactive confirmation (required in non-interactive mode)")
+  .action(async (local: Record<string, any>, current: Command) => {
+    await runPayboxWrite("paybox_pay_x402", {
+      ...(local.data ? parseJson(local.data) : {}),
+      accepts: parseJson(local.accepts),
+      resource: parseJson(local.resource),
+      ...(local.credentialId ? { credential_id: local.credentialId } : {}),
+    }, local, current);
+  });
+
 const mcp = program.command("mcp");
 mcp.command("check")
   .description("Initialize MCP and require the supported tool set (additional tools are allowed)")
@@ -542,7 +643,10 @@ program.command("completion <shell>").description("Print shell completion for ba
 async function runOperation(operation: Operation, local: Record<string, any>, globals: Record<string, any>) {
   if (operation.destructive && !local.yes) {
     if (!process.stdin.isTTY) throw new CliError("Destructive commands require --yes in non-interactive mode", 4);
-    const accepted = await confirm({ message: `Run ${operation.tool} on ${operation.params?.map((p) => `${p}=${local[p]}`).join(", ") || "the selected resource"}?` });
+    const message = operation.tool === "delete_folder"
+      ? `Delete custom folder ${local.folderId}; move all messages in it to Trash?`
+      : `Run ${operation.tool} on ${operation.params?.map((p) => `${p}=${local[p]}`).join(", ") || "the selected resource"}?`;
+    const accepted = await confirm({ message });
     if (!accepted) throw new CliError("Cancelled", 130);
   }
   const client = resolveClientOptions(globals);
@@ -554,6 +658,46 @@ async function runOperation(operation: Operation, local: Record<string, any>, gl
   const { data } = await apiRequest(client, { method: operation.method, path, query, body, idempotencyKey: local.idempotencyKey });
   const transformed = globals.transform ? transform(data, globals.transform) : data;
   await printOutput(transformed, globals.format, local.outputFile);
+}
+
+async function runPayboxWrite(
+  toolName: "paybox_request_transfer" | "paybox_request_swap" | "paybox_pay_x402",
+  args: Record<string, unknown>,
+  local: Record<string, any>,
+  current: Command,
+) {
+  const client = resolveClientOptions(current.optsWithGlobals());
+  const chain = toolName === "paybox_request_swap"
+    ? args.src_chain
+    : toolName === "paybox_pay_x402" && isRecord(args.accepts)
+      ? args.accepts.network
+      : args.chain;
+  if (typeof chain !== "string" || !chain.trim()) {
+    throw new CliError("A concrete chain is required to select and validate an Agent Wallet credential", 2, 400, "wallet_chain_required");
+  }
+  const credentials = await callWalletTool({ client, cliVersion: packageJson.version, toolName: "paybox_list_credentials", requiredScopes: ["mcp:tools"], arguments: {} });
+  const selected = selectPayboxCredential(credentials, chain, typeof args.credential_id === "string" ? args.credential_id : undefined);
+  const invocation = { ...args, credential_id: selected.id };
+  if (!local.yes) {
+    if (!process.stdin.isTTY) throw new CliError("Financial Agent Wallet commands require --yes in non-interactive mode", 4);
+    process.stderr.write(`${JSON.stringify({ tool: toolName, arguments: invocation, approval_mode: selected.approvalMode }, null, 2)}\n`);
+    const accepted = await confirm({ message: "Submit this Agent Wallet operation exactly once?" });
+    if (!accepted) throw new CliError("Cancelled", 130);
+  }
+  const data = await callWalletTool({ client, cliVersion: packageJson.version, toolName, requiredScopes: ["mcp:tools"], arguments: invocation });
+  const classified = classifyPayboxResult(data);
+  await printOutput(classified, outputFormat(current));
+  if (classified.completed !== true) {
+    const classifiedRecord = classified as Record<string, unknown> & { completed: boolean; terminal: boolean };
+    const status = typeof classifiedRecord.status === "string" ? classifiedRecord.status : "unknown";
+    throw new CliError(
+      `Agent Wallet operation is ${status}; preserve the original request and do not resubmit`,
+      1,
+      classified.terminal ? 409 : 202,
+      `wallet_${status}`,
+      classified,
+    );
+  }
 }
 
 async function bodyFrom(options: Record<string, any>, operation: Operation) {
@@ -693,7 +837,7 @@ function completionScript(shell: string) {
     mailboxes: ["ensure"],
     auth: ["check", "login", "status", "logout"],
     mcp: ["check", "tools"],
-    wallet: ["status", "credentials", "portfolio", "request", "proposal", "transfer"],
+    wallet: ["status", "credentials", "portfolio", "request", "proposal", "transfer", "paybox"],
   };
   const actions = Object.fromEntries(
     [...groups, "auth", "mcp", "wallet"].map((group) => [
@@ -704,10 +848,11 @@ function completionScript(shell: string) {
       ].join(" "),
     ]),
   );
-  if (shell === "fish") return `complete -c mermail -f\ncomplete -c mermail -n '__fish_use_subcommand' -a '${root}'\n${Object.entries(actions).map(([group, values]) => `complete -c mermail -n '__fish_seen_subcommand_from ${group}' -a '${values}'`).join("\n")}\n`;
-  if (shell === "zsh") return `#compdef mermail\nlocal -a commands\ncommands=(${root})\nif (( CURRENT == 2 )); then _describe command commands; return; fi\ncase $words[2] in\n${Object.entries(actions).map(([group, values]) => `  ${group}) _values action ${values} ;;`).join("\n")}\nesac\n`;
+  const payboxActions = "connection credentials portfolio request transfer swap x402";
+  if (shell === "fish") return `complete -c mermail -f\ncomplete -c mermail -n '__fish_use_subcommand' -a '${root}'\n${Object.entries(actions).map(([group, values]) => `complete -c mermail -n '__fish_seen_subcommand_from ${group}' -a '${values}'`).join("\n")}\ncomplete -c mermail -n '__fish_seen_subcommand_from wallet; and __fish_seen_subcommand_from paybox' -a '${payboxActions}'\n`;
+  if (shell === "zsh") return `#compdef mermail\nlocal -a commands\ncommands=(${root})\nif (( CURRENT == 2 )); then _describe command commands; return; fi\nif (( CURRENT == 4 )) && [[ $words[2] == wallet && $words[3] == paybox ]]; then _values action ${payboxActions}; return; fi\ncase $words[2] in\n${Object.entries(actions).map(([group, values]) => `  ${group}) _values action ${values} ;;`).join("\n")}\nesac\n`;
   const cases = Object.entries(actions).map(([group, values]) => `${group}) words='${values}' ;;`).join(" ");
-  return `_mermail() { local cur words; cur="\${COMP_WORDS[COMP_CWORD]}"; if [[ $COMP_CWORD -eq 1 ]]; then words='${root}'; else case "\${COMP_WORDS[1]}" in ${cases} *) words='' ;; esac; fi; COMPREPLY=( $(compgen -W "$words" -- "$cur") ); }\ncomplete -F _mermail mermail\n`;
+  return `_mermail() { local cur words; cur="\${COMP_WORDS[COMP_CWORD]}"; if [[ $COMP_CWORD -eq 1 ]]; then words='${root}'; elif [[ $COMP_CWORD -eq 3 && "\${COMP_WORDS[1]}" == wallet && "\${COMP_WORDS[2]}" == paybox ]]; then words='${payboxActions}'; else case "\${COMP_WORDS[1]}" in ${cases} *) words='' ;; esac; fi; COMPREPLY=( $(compgen -W "$words" -- "$cur") ); }\ncomplete -F _mermail mermail\n`;
 }
 
 program.exitOverride();

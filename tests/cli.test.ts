@@ -44,6 +44,36 @@ describe("CLI process", () => {
     expect(result.stdout).toContain("bulk-delete");
     expect(result.stdout).toContain("wait");
     expect(result.stdout).toContain("ensure");
+    expect(result.stdout).toContain("ai-credits");
+    expect(result.stdout).toContain("ai-credit-events");
+    expect(result.stdout).toContain("paybox");
+    expect(result.stdout).toContain("connection credentials portfolio request transfer swap x402");
+  });
+
+  it("documents AI credits, current mailbox modes, and folder deletion effects", () => {
+    const usage = cli(["usage", "ai-credit-events", "--help"]);
+    const mailbox = cli(["mailboxes", "update", "--help"]);
+    const folder = cli(["folders", "delete", "--help"]);
+    expect(usage.stdout).toContain("--cursor");
+    expect(usage.stdout).toContain("--limit");
+    expect(mailbox.stdout).toContain("draft_for_review");
+    expect(mailbox.stdout).toContain("automatic_triage");
+    expect(folder.stdout).toContain("movedToTrashCount");
+    expect(folder.stdout).toContain("system folders");
+  });
+
+  it("exposes the live Agent Wallet command group without removing legacy commands", () => {
+    const wallet = cli(["wallet", "--help"]);
+    const paybox = cli(["wallet", "paybox", "--help"]);
+    const transfer = cli(["wallet", "paybox", "transfer", "--help"]);
+    expect(wallet.stdout).toContain("proposal");
+    expect(wallet.stdout).toContain("paybox");
+    for (const action of ["connection", "credentials", "portfolio", "request", "transfer", "swap", "x402"]) {
+      expect(paybox.stdout).toContain(action);
+    }
+    expect(transfer.stdout).toContain("--credential-id");
+    expect(transfer.stdout).toContain("--chain");
+    expect(transfer.stdout).toContain("--yes");
   });
 
   it("documents the additive verification-email wait command", () => {

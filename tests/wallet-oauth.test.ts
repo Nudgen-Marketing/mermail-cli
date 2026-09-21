@@ -12,7 +12,13 @@ import {
   saveOauthSession,
   sessionHasScopes,
 } from "../src/oauth.js";
-import { extractMcpToolResult, submitWalletTransfer } from "../src/wallet.js";
+import {
+  callWalletTool,
+  classifyPayboxResult,
+  extractMcpToolResult,
+  selectPayboxCredential,
+  submitWalletTransfer,
+} from "../src/wallet.js";
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
@@ -199,6 +205,36 @@ describe("mcpRequest oauth bearer", () => {
 });
 
 describe("wallet mcp helpers", () => {
+  it("selects one chain-compatible autonomous credential and preserves an explicit selection", () => {
+    const credentials = { credentials: [
+      { id: "evm-interactive", kind: "wallet", status: "ACTIVE", metadata: { chains: ["evm"] }, approval_mode: "interactive" },
+      { id: "evm-auto", kind: "wallet", status: "ACTIVE", metadata: { chains: ["evm"] }, approval_mode: "autonomous" },
+      { id: "solana-auto", kind: "wallet", status: "ACTIVE", metadata: { chains: ["solana"] }, approval_mode: "autonomous" },
+    ] };
+    expect(selectPayboxCredential(credentials, "eip155:8453").id).toBe("evm-auto");
+    expect(selectPayboxCredential(credentials, "eip155:8453", "evm-interactive").id).toBe("evm-interactive");
+    expect(() => selectPayboxCredential(credentials, "solana", "evm-auto")).toThrowError(/not active or compatible/);
+  });
+
+  it("rejects ambiguous wallets and missing chain metadata", () => {
+    const credentials = { granted: [
+      { credential_id: "one", type: "wallet", chains: ["evm"], policy: { approval_mode: "autonomous" } },
+      { credential_id: "two", type: "wallet", chains: ["evm"], policy: { approval_mode: "autonomous" } },
+      { credential_id: "unknown-chain", type: "wallet", approval_mode: "autonomous" },
+    ] };
+    expect(() => selectPayboxCredential(credentials, "base")).toThrowError(/Multiple eligible/);
+    expect(() => selectPayboxCredential({ credentials: [credentials.granted[2]] }, "base")).toThrowError(/No active/);
+  });
+
+  it("classifies every nonterminal and unknown financial status as incomplete", () => {
+    for (const status of ["setup_required", "pending_execution", "recovery_required", "pending_approval", "pending_signature", "SUBMISSION_UNKNOWN"]) {
+      expect(classifyPayboxResult({ status, request_id: "original" })).toMatchObject({ completed: false, terminal: false, request_id: "original" });
+    }
+    expect(classifyPayboxResult({ status: "success" })).toMatchObject({ completed: true, terminal: true });
+    expect(classifyPayboxResult({ status: "failed" })).toMatchObject({ completed: false, terminal: true });
+    expect(classifyPayboxResult({ status: "new_provider_state" })).toMatchObject({ completed: false, terminal: false });
+  });
+
   it("extracts structured tool results and surfaces errors", () => {
     expect(
       extractMcpToolResult({
@@ -210,6 +246,39 @@ describe("wallet mcp helpers", () => {
         result: { isError: true, structuredContent: { error: "paybox_not_connected", code: "paybox_not_connected" } },
       }),
     ).toThrow(CliError);
+  });
+
+  it("probes the connection and refreshes discovery before declaring a PayBox tool unavailable", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "mermail-cli-paybox-probe-"));
+    process.env.MERMAIL_CONFIG_DIR = configDir;
+    let listCalls = 0;
+    const calls: string[] = [];
+    const server = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (body.method === "initialize") return sendJson(res, 200, { jsonrpc: "2.0", id: body.id, result: {} });
+      if (body.method === "tools/list") {
+        listCalls += 1;
+        return sendJson(res, 200, { jsonrpc: "2.0", id: body.id, result: { tools: listCalls === 1 ? [] : [{ name: "paybox_get_portfolio" }] } });
+      }
+      calls.push(body.params.name);
+      return sendJson(res, 200, { jsonrpc: "2.0", id: body.id, result: { structuredContent: body.params.name === "get_paybox_connection" ? { status: "CONNECTED" } : { balances: [] } } });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    await saveOauthSession({ baseUrl, clientId: "client", accessToken: "token", refreshToken: "refresh", expiresAt: Date.now() + 60_000, scopes: ["mcp:tools"], resource: `${baseUrl}/mcp`, updatedAt: new Date().toISOString() });
+    try {
+      await expect(callWalletTool({ client: { baseUrl, timeout: 5_000 }, cliVersion: "test", toolName: "paybox_get_portfolio", requiredScopes: ["mcp:tools"], arguments: {} })).resolves.toEqual({ balances: [] });
+      expect(calls).toEqual(["get_paybox_connection", "paybox_get_portfolio"]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await clearOauthSession();
+      delete process.env.MERMAIL_CONFIG_DIR;
+      await rm(configDir, { recursive: true, force: true });
+    }
   });
 
   it("submits the legacy proposal directly with the current MCP schema", async () => {

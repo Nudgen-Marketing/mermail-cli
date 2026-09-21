@@ -1,11 +1,22 @@
 {
   "name": "mermail-cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Official command-line interface for the Mermail API and MCP server",
-  "keywords": ["mermail", "email", "ai-agent", "cli", "mcp"],
-  "repository": { "type": "git", "url": "git+https://github.com/Nudgen-Marketing/mermail-cli.git" },
+  "keywords": [
+    "mermail",
+    "email",
+    "ai-agent",
+    "cli",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nudgen-Marketing/mermail-cli.git"
+  },
   "homepage": "https://docs.mermail.app/ai/cli",
-  "bugs": { "url": "https://github.com/Nudgen-Marketing/mermail-cli/issues" },
+  "bugs": {
+    "url": "https://github.com/Nudgen-Marketing/mermail-cli/issues"
+  },
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -14,6 +25,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
