@@ -81,7 +81,7 @@ export async function apiRequest(client: ClientOptions, input: ApiRequestInput):
           response.status === 401 ? 3 : 1,
           response.status,
           code,
-          body.details,
+          body.details ?? body,
           response.headers.get("x-request-id") ?? undefined,
           retryAfterMs,
         );

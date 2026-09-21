@@ -21,6 +21,8 @@ Requires Node.js 22 or newer. For a one-shot run, use `npx --yes mermail-cli --h
 mermail doctor
 mermail auth check
 mermail workspaces list
+mermail usage ai-credits --workspace-id WORKSPACE_ID
+mermail usage ai-credit-events --workspace-id WORKSPACE_ID --limit 25
 mermail mailboxes list --format table
 mermail emails send \
   --mailbox-id MAILBOX_PUBLIC_ID \
@@ -91,13 +93,16 @@ Raw/full output remains the default for compatibility. For agent verification, c
 
 **Sold API mail/workspace commands** use `MERMAIL_API_KEY` (or `--api-key`). The CLI does not store API keys.
 
-**Agent Wallet** uses MCP OAuth instead. API keys never unlock PayBox / Agent Wallet tools. The CLI's current `wallet` commands are legacy owner-only operations; current workspace members can use model-visible live `paybox_*` through the owner's active connection in a full-profile MCP host, but the CLI does not expose direct transfer, swap, or x402 commands.
+**Agent Wallet** uses MCP OAuth instead. API keys never unlock PayBox / Agent Wallet tools. Existing `wallet` commands remain available, and `wallet paybox` exposes the live connection, credentials, portfolio, request, transfer, swap, and x402 tools.
 
 ```bash
 # Interactive browser PKCE login (stores tokens in ~/.config/mermail/mcp-oauth.json, mode 0600)
 mermail auth login
 mermail auth status
 mermail wallet status --mailbox-id MAILBOX_PUBLIC_ID
+mermail wallet paybox connection
+mermail wallet paybox credentials
+mermail wallet paybox portfolio --chain base
 mermail wallet proposal create \
   --mailbox-id MAILBOX_PUBLIC_ID \
   --chain BASE \
@@ -107,10 +112,20 @@ mermail wallet transfer submit \
   --proposal-id PROPOSAL_ID \
   --version 1 \
   --yes
+mermail wallet paybox transfer \
+  --chain eip155:8453 \
+  --token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 \
+  --amount 1 \
+  --to 0x... \
+  --yes
 mermail auth logout
 ```
 
-`auth login` requires a TTY (not CI headless) and defaults to the core `mcp:tools openid offline_access` scopes. Legacy `wallet:read` / `wallet:transact` labels are compatibility-only and are not required for Agent Wallet visibility. Connect PayBox in the Mermail console Agent Wallet page. Pending or `SUBMISSION_UNKNOWN` results are not success — do not auto-retry.
+`auth login` requires a TTY (not CI headless) and defaults to the core `mcp:tools openid offline_access` scopes. Legacy `wallet:read` / `wallet:transact` labels are compatibility-only and are not required for Agent Wallet visibility. The CLI probes `get_paybox_connection` before it concludes a live tool is unavailable.
+
+Financial `wallet paybox` commands discover credentials first. An explicit `--credential-id` is preserved and validated against the requested chain. Otherwise the CLI prefers the sole eligible `autonomous` credential and stops on ambiguity. Grants authorize execution within their scope; they do not supply or replace the chain, token, amount, destination, x402 requirement, or CLI confirmation. Interactive confirmation or `--yes` is always required, and each write is submitted once.
+
+`setup_required`, `pending_execution`, `recovery_required`, approval/signature states, and unknown states are incomplete. Keep the original `request_id` or invocation and use only the returned handoff. Query it with `mermail wallet paybox request --request-id ...`; do not submit the transfer, swap, or x402 write again. The CLI marks success only for an explicit terminal success state.
 
 `wallet proposal create --amount` is the human USDC amount for the metered proposal path. It is not the MCP `paybox_request_transfer` field: catalog-token transfers are MCP-only and take the human amount in `amount_decimal`.
 
@@ -123,6 +138,22 @@ mermail wallet fund-url --mailbox-id MAILBOX_PUBLIC_ID --amount 1
 ```
 
 For signing, use the PayBox MCP App when the host renders it. Otherwise print the exact invocation-scoped `signing_handoff.console_url` returned by the transfer tool. Never construct, rewrite, or bind a signing URL to a mailbox locally.
+
+## AI credits and mailbox policy
+
+`usage ai-credits` shows the shared workspace allowance, charged, reserved, and remaining credits, renewal time, action prices, and accounting mode. In `observe` mode, observed charges are hypothetical; in `enforce` mode, the remaining balance gates AI actions. `usage ai-credit-events` supports `--cursor` and `--limit` (1–100) for accounting history.
+
+The CLI preserves `ai_credits_exhausted`, `ai_credit_accounting_unavailable`, and `ai_action_in_progress` error codes with recovery details. A blocked, reserved, running, or uncertain generation/send is not replayed automatically.
+
+Mailbox response policy is updated through the existing command. It requires workspace admin access:
+
+```bash
+mermail mailboxes update \
+  --mailbox-id MAILBOX_PUBLIC_ID \
+  --settings '{"agentAutoResponse":{"mode":"draft_for_review"}}'
+```
+
+Valid response modes are `draft_for_review` and `automatic_triage`. Verification inboxes must keep `agentInbox.automationsEnabled=false`. Deleting a custom folder requires confirmation, moves messages from that folder to Trash, and returns `movedToTrashCount`; system folders are protected.
 
 `mermail auth check` and `mermail mcp check` remain API-key probes for Sold/MCP catalog health.
 
@@ -172,7 +203,7 @@ Protect the GitHub `npm` environment with required reviewers. For a release, bum
 
 After one successful OIDC release, revoke any old npm automation token and enable npm's option to disallow token-based publishing.
 
-The checked-in operation manifest intentionally exposes 70 supported Sold API business operations. `npm run validate:openapi` checks every method/path and regenerates operation-specific flags; the scheduled remote contract job compares the required tool names with the production MCP server card while allowing future additive MCP tools. Console-only API-key administration is not available through project API keys.
+The checked-in operation manifest intentionally exposes 72 of the 73 Sold API business operations. `set_default_task_triager` is the documented exception and has no CLI command. `npm run validate:openapi` regenerates operation-specific flags from the current `/docs/openapi.json` snapshot while preserving compatible route definitions omitted from that partial document. The remote contract check is two-way and allows only `prepare_destructive_action` plus `set_default_task_triager` outside the CLI operation list. Console-only API-key administration is not available through project API keys.
 
 ## License
 

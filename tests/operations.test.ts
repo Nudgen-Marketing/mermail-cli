@@ -16,9 +16,9 @@ const openapi = JSON.parse(
 };
 
 describe("operation manifest", () => {
-  it("contains exactly the 70 supported Sold API business operations", () => {
-    expect(operations).toHaveLength(70);
-    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(70);
+  it("contains exactly the 72 supported Sold API business operations", () => {
+    expect(operations).toHaveLength(72);
+    expect(new Set(operations.map((operation) => operation.tool)).size).toBe(72);
   });
 
   it("does not expose console-only API key routes", () => {
@@ -39,8 +39,10 @@ describe("operation manifest", () => {
   });
 
   it("generates operation-specific fields", () => {
+    expect(operationSchemas.get_ai_credit_usage.query).toEqual([]);
+    expect(operationSchemas.list_ai_credit_events.query.map((field) => field.name)).toEqual(["cursor", "limit"]);
+    expect(operationSchemas.list_ai_credit_events.query.find((field) => field.name === "limit")?.type).toBe("integer");
     expect(operationSchemas.send_email.body.map((field) => field.name)).toContain("attachments");
-    expect(operationSchemas.list_emails.query.map((field) => field.name)).toContain("category");
     expect(operationSchemas.list_emails.query.map((field) => field.name)).toEqual(
       expect.arrayContaining([
         "include_held",
@@ -66,6 +68,12 @@ describe("operation manifest", () => {
     expect(operationSchemas.search_emails.query.find((field) => field.name === "require_scan_status")?.values).toEqual(["clean", "flagged", "skipped"]);
   });
 
+  it("documents current mailbox response modes and folder deletion effects", () => {
+    expect(operations.find((operation) => operation.tool === "update_mailbox_settings")?.description).toContain("draft_for_review");
+    expect(operations.find((operation) => operation.tool === "update_mailbox_settings")?.description).toContain("automatic_triage");
+    expect(operations.find((operation) => operation.tool === "delete_folder")?.description).toContain("Trash");
+  });
+
   it("keeps the mailbox-first primitives aligned with the MCP operation names", () => {
     expect(operations).toEqual(expect.arrayContaining([
       expect.objectContaining({ tool: "list_mailboxes", group: "mailboxes", action: "list", method: "GET" }),
@@ -81,22 +89,10 @@ describe("operation manifest", () => {
     expect(operations.some((operation) => operation.tool === "set_default_task_triager")).toBe(false);
   });
 
-  it("documents the stable Mermail id and secondary provider message id", () => {
+  it("documents the stable Mermail email id and sender authentication", () => {
     const email = openapi.components.schemas.Email.properties;
-    const messageId = email.message_id as {
-      type?: string | string[];
-      nullable?: boolean;
-      description?: string;
-    };
     expect(email.id).toMatchObject({ type: "string" });
-    expect(email.id?.description).toContain("Authoritative Mermail email id");
-    expect(
-      messageId.nullable === true ||
-        (Array.isArray(messageId.type) &&
-          messageId.type.includes("string") &&
-          messageId.type.includes("null")),
-    ).toBe(true);
-    expect(messageId.description).toContain("secondary correlation");
+    expect(email.id?.description).toContain("Use as emailId");
     expect(
       openapi.components.schemas.Email.properties.sender_authentication
         ?.description,

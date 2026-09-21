@@ -6,12 +6,15 @@ export type Operation = {
   path: string;
   params?: string[];
   destructive?: boolean;
+  description?: string;
 };
 
-const op = (tool: string, group: string, action: string, method: Operation["method"], path: string, params: string[] = [], destructive = false): Operation => ({ tool, group, action, method, path, params, destructive });
+const op = (tool: string, group: string, action: string, method: Operation["method"], path: string, params: string[] = [], destructive = false, description?: string): Operation => ({ tool, group, action, method, path, params, destructive, description });
 
 export const operations: Operation[] = [
-  op("get_api_credit_usage", "usage", "credits", "GET", "/api/v1/workspaces/{workspaceId}/usage/credits", ["workspaceId"]),
+  op("get_api_credit_usage", "usage", "credits", "GET", "/api/v1/workspaces/{workspaceId}/usage/credits", ["workspaceId"], false, "Read legacy API request-credit usage"),
+  op("get_ai_credit_usage", "usage", "ai-credits", "GET", "/api/v1/workspaces/{workspaceId}/usage/ai-credits", ["workspaceId"], false, "Read AI allowance, charged, reserved, remaining, renewal, and observe/enforce mode"),
+  op("list_ai_credit_events", "usage", "ai-credit-events", "GET", "/api/v1/workspaces/{workspaceId}/usage/ai-credits/events", ["workspaceId"], false, "List paginated AI credit accounting events"),
   op("get_email_usage", "usage", "email", "GET", "/api/v1/workspaces/{workspaceId}/usage/email", ["workspaceId"]),
   op("list_workspaces", "workspaces", "list", "GET", "/api/v1/workspaces"),
   op("get_workspace", "workspaces", "get", "GET", "/api/v1/workspaces/{workspaceId}", ["workspaceId"]),
@@ -30,7 +33,7 @@ export const operations: Operation[] = [
   op("list_mailboxes", "mailboxes", "list", "GET", "/api/v1/mailboxes"),
   op("create_mailbox", "mailboxes", "create", "POST", "/api/v1/mailboxes"),
   op("get_mailbox", "mailboxes", "get", "GET", "/api/v1/mailboxes/{mailboxId}", ["mailboxId"]),
-  op("update_mailbox_settings", "mailboxes", "update", "PUT", "/api/v1/mailboxes/{mailboxId}", ["mailboxId"]),
+  op("update_mailbox_settings", "mailboxes", "update", "PUT", "/api/v1/mailboxes/{mailboxId}", ["mailboxId"], false, "Update mailbox settings; agent replies support draft_for_review and automatic_triage (admin required)"),
   op("get_mailbox_storage", "mailboxes", "storage", "GET", "/api/v1/mailboxes/{mailboxId}/storage", ["mailboxId"]),
   op("list_emails", "emails", "list", "GET", "/api/v1/mailboxes/{mailboxId}/emails", ["mailboxId"]),
   op("send_email", "emails", "send", "POST", "/api/v1/mailboxes/{mailboxId}/emails", ["mailboxId"]),
@@ -54,7 +57,7 @@ export const operations: Operation[] = [
   op("list_folders", "folders", "list", "GET", "/api/v1/mailboxes/{mailboxId}/folders", ["mailboxId"]),
   op("create_folder", "folders", "create", "POST", "/api/v1/mailboxes/{mailboxId}/folders", ["mailboxId"]),
   op("update_folder", "folders", "update", "PUT", "/api/v1/mailboxes/{mailboxId}/folders/{folderId}", ["mailboxId", "folderId"]),
-  op("delete_folder", "folders", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/folders/{folderId}", ["mailboxId", "folderId"], true),
+  op("delete_folder", "folders", "delete", "DELETE", "/api/v1/mailboxes/{mailboxId}/folders/{folderId}", ["mailboxId", "folderId"], true, "Delete a custom folder and move its messages to Trash; system folders are protected"),
   op("search_emails", "emails", "search", "GET", "/api/v1/mailboxes/{mailboxId}/search", ["mailboxId"]),
   op("list_custom_labels", "labels", "list", "GET", "/api/v1/mailboxes/{mailboxId}/custom-labels", ["mailboxId"]),
   op("create_custom_label", "labels", "create", "POST", "/api/v1/mailboxes/{mailboxId}/custom-labels", ["mailboxId"]),

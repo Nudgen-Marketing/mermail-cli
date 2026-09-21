@@ -114,4 +114,17 @@ describe("client", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("preserves AI credit recovery details without replaying a blocked write", async () => {
+    for (const code of ["ai_credits_exhausted", "ai_credit_accounting_unavailable", "ai_action_in_progress"]) {
+      const body = { error: code, code, renewal_at: "2026-10-01T00:00:00Z", reservation_id: "reservation-1" };
+      const fetchMock = vi.fn().mockResolvedValue(Response.json(body, { status: code === "ai_credits_exhausted" ? 402 : 409 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(apiRequest(
+        resolveClientOptions({ apiKey: "sk-proj-test" }),
+        { method: "POST", path: "/api/v1/mailboxes/mailbox-1/drafts/regenerate", body: {} },
+      )).rejects.toMatchObject({ code, details: body });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
 });

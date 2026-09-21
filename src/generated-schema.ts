@@ -4,6 +4,25 @@ export const operationSchemas = {
     "query": [],
     "body": []
   },
+  "get_ai_credit_usage": {
+    "query": [],
+    "body": []
+  },
+  "list_ai_credit_events": {
+    "query": [
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false
+      }
+    ],
+    "body": []
+  },
   "get_email_usage": {
     "query": [],
     "body": []
@@ -117,7 +136,7 @@ export const operationSchemas = {
         "name": "workspaceId",
         "type": "string",
         "required": false,
-        "description": "Filter by workspace id (session users). API keys ignore cross-workspace values and stay on the key’s workspace."
+        "description": "Optional for session clients; workspace-scoped credentials use their bound workspace."
       }
     ],
     "body": []
@@ -129,25 +148,25 @@ export const operationSchemas = {
         "name": "email",
         "type": "string",
         "required": true,
-        "description": "Mailbox address on an allowed Mermail or custom domain"
+        "description": "Address on an allowed hosted or fully verified custom domain."
       },
       {
         "name": "name",
         "type": "string",
         "required": true,
-        "description": "Display name (also seeds settings.fromName)"
+        "description": "Human-readable mailbox display name."
       },
       {
         "name": "workspaceId",
         "type": "string",
         "required": false,
-        "description": "Optional for a workspace-bound API key or MCP OAuth grant. If supplied, it must match the credential workspace."
+        "description": "Optional for workspace-scoped API keys; if supplied it must match the credential workspace."
       },
       {
         "name": "settings",
         "type": "object",
         "required": false,
-        "description": "Optional mailbox settings merged over defaults. For a verification-only inbox, set `agentInbox` to `{ \"mode\": \"verification\", \"automationsEnabled\": false }`."
+        "description": "Optional mailbox settings. For a dedicated verification inbox, use agentInbox.mode=verification and agentInbox.automationsEnabled=false."
       }
     ]
   },
@@ -176,96 +195,22 @@ export const operationSchemas = {
         "name": "folder",
         "type": "string",
         "required": false,
-        "description": "Folder id"
-      },
-      {
-        "name": "thread_id",
-        "type": "string",
-        "required": false,
-        "description": "Filter by thread id"
-      },
-      {
-        "name": "category",
-        "type": "string",
-        "required": false,
-        "description": "Email category",
-        "values": [
-          "customer_support",
-          "technical",
-          "partnership",
-          "other"
-        ]
-      },
-      {
-        "name": "custom_label",
-        "type": "string",
-        "required": false,
-        "description": "Custom label slug"
-      },
-      {
-        "name": "is_starred",
-        "type": "string",
-        "required": false,
-        "description": "true/1 or false/0"
-      },
-      {
-        "name": "is_read",
-        "type": "string",
-        "required": false,
-        "description": "true/1 or false/0"
-      },
-      {
-        "name": "threaded",
-        "type": "string",
-        "required": false,
-        "description": "Set to true/1 to aggregate by thread"
-      },
-      {
-        "name": "metadata_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true to omit body, snippet, raw headers, and threat URLs from returned email items"
-      },
-      {
-        "name": "include_held",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true only for a scoped verification flow that must inspect messages temporarily held for auto-draft processing"
-      },
-      {
-        "name": "require_scan_status",
-        "type": "string",
-        "required": false,
-        "description": "Require the exact stored scan status; non-matching messages are excluded",
-        "values": [
-          "clean",
-          "flagged",
-          "skipped"
-        ]
-      },
-      {
-        "name": "agent_safe_content",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
+        "description": "Use inbox for inbound verification messages."
       },
       {
         "name": "page",
         "type": "integer",
-        "required": false,
-        "description": "Page number (≥1)"
+        "required": false
       },
       {
         "name": "limit",
         "type": "integer",
-        "required": false,
-        "description": "Page size (1–100, default 25)"
+        "required": false
       },
       {
         "name": "sortColumn",
         "type": "string",
         "required": false,
-        "description": "Sort column",
         "values": [
           "id",
           "subject",
@@ -280,7 +225,39 @@ export const operationSchemas = {
         "name": "sortDirection",
         "type": "string",
         "required": false,
-        "description": "ASC for ascending; otherwise descending"
+        "values": [
+          "ASC",
+          "DESC"
+        ]
+      },
+      {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Include mail held by auto-draft. Use only for the active verification flow."
+      },
+      {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Omit body, snippet, raw headers, and threat URLs while establishing a baseline or correlating candidates."
+      },
+      {
+        "name": "require_scan_status",
+        "type": "string",
+        "required": false,
+        "description": "Require an exact stored scan status. Prefer clean before exposing content to an agent.",
+        "values": [
+          "clean",
+          "flagged",
+          "skipped"
+        ]
+      },
+      {
+        "name": "agent_safe_content",
+        "type": "boolean",
+        "required": false,
+        "description": "Omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics; normalize untrusted text fields to bounded plain text."
       }
     ],
     "body": []
@@ -291,8 +268,7 @@ export const operationSchemas = {
       {
         "name": "to",
         "type": "json",
-        "required": true,
-        "description": "Recipient email or list"
+        "required": true
       },
       {
         "name": "cc",
@@ -317,17 +293,20 @@ export const operationSchemas = {
       {
         "name": "html",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Rich email body. When html and text are both supplied, both MIME alternatives are delivered and html is stored for display."
       },
       {
         "name": "text",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Literal plain-text body. Newlines and repeated spaces are preserved; Markdown is not rendered."
       },
       {
         "name": "attachments",
         "type": "array",
-        "required": false
+        "required": false,
+        "description": "Base64 file bytes or an existing attachment_id from the same authorized mailbox. Omit to preserve attachments from source_draft_id (send) or draft_id (save/schedule); [] clears; an array replaces the complete set. Storage limits: 20 files, 10 MiB each, 25 MiB decoded total. Provider message limits include encoding/overhead: Cloudflare 5 MiB, Resend 40 MB. Reject empty files, unsafe filenames, malformed base64, duplicate references and Content-IDs. Base64 adds about one third in transport size; reverse proxy limits also apply. Local paths and URLs are not accepted."
       },
       {
         "name": "in_reply_to",
@@ -348,28 +327,39 @@ export const operationSchemas = {
         "name": "source_draft_id",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "client_send_id",
+        "type": "string",
+        "required": false
       }
     ]
   },
   "get_email": {
     "query": [
       {
-        "name": "metadata_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true to omit body, snippet, raw headers, and threat URLs"
-      },
-      {
         "name": "include_held",
         "type": "boolean",
         "required": false,
-        "description": "Set to true only for a scoped verification flow that must inspect a message temporarily held for auto-draft processing"
+        "description": "Read a held message only for the active verification flow."
+      },
+      {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Omit body, snippet, raw headers, and threat URLs."
+      },
+      {
+        "name": "action_metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Omit message content and include bounded, server-derived reply_targets for safe action preflight."
       },
       {
         "name": "require_scan_status",
         "type": "string",
         "required": false,
-        "description": "Expose the body only when the stored scan status exactly matches. An existing mismatch returns safe metadata with content_omitted=true.",
+        "description": "Expose the body only when the stored scan status exactly matches. Existing mismatches return safe metadata with content_omitted=true.",
         "values": [
           "clean",
           "flagged",
@@ -380,13 +370,13 @@ export const operationSchemas = {
         "name": "max_body_chars",
         "type": "integer",
         "required": false,
-        "description": "Positive character cap for the returned body without mutating the stored message. The effective server ceiling is 100000 characters."
+        "description": "Cap the returned body length without mutating the stored message."
       },
       {
         "name": "agent_safe_content",
         "type": "boolean",
         "required": false,
-        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
+        "description": "Omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics; normalize untrusted text fields to bounded plain text."
       }
     ],
     "body": []
@@ -396,20 +386,19 @@ export const operationSchemas = {
       {
         "name": "limit",
         "type": "integer",
-        "required": false,
-        "description": "Thread messages per page (default 20)"
+        "required": false
       },
       {
         "name": "cursor",
         "type": "string",
         "required": false,
-        "description": "Opaque next_cursor from the preceding context page"
+        "description": "Opaque next_cursor from the preceding context page."
       },
       {
         "name": "include_held",
         "type": "boolean",
         "required": false,
-        "description": "Include mail held by auto-draft only for the active verification flow"
+        "description": "Include mail held by auto-draft only for the active verification flow."
       }
     ],
     "body": []
@@ -502,8 +491,7 @@ export const operationSchemas = {
       {
         "name": "to",
         "type": "json",
-        "required": true,
-        "description": "Recipient email or list"
+        "required": true
       },
       {
         "name": "cc",
@@ -528,17 +516,20 @@ export const operationSchemas = {
       {
         "name": "html",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Rich email body. When html and text are both supplied, both MIME alternatives are delivered and html is stored for display."
       },
       {
         "name": "text",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Literal plain-text body. Newlines and repeated spaces are preserved; Markdown is not rendered."
       },
       {
         "name": "attachments",
         "type": "array",
-        "required": false
+        "required": false,
+        "description": "Base64 file bytes or an existing attachment_id from the same authorized mailbox. Omit to preserve attachments from source_draft_id (send) or draft_id (save/schedule); [] clears; an array replaces the complete set. Storage limits: 20 files, 10 MiB each, 25 MiB decoded total. Provider message limits include encoding/overhead: Cloudflare 5 MiB, Resend 40 MB. Reject empty files, unsafe filenames, malformed base64, duplicate references and Content-IDs. Base64 adds about one third in transport size; reverse proxy limits also apply. Local paths and URLs are not accepted."
       },
       {
         "name": "in_reply_to",
@@ -557,6 +548,11 @@ export const operationSchemas = {
       },
       {
         "name": "source_draft_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "client_send_id",
         "type": "string",
         "required": false
       }
@@ -568,8 +564,7 @@ export const operationSchemas = {
       {
         "name": "to",
         "type": "json",
-        "required": true,
-        "description": "Recipient email or list"
+        "required": true
       },
       {
         "name": "cc",
@@ -594,17 +589,20 @@ export const operationSchemas = {
       {
         "name": "html",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Rich email body. When html and text are both supplied, both MIME alternatives are delivered and html is stored for display."
       },
       {
         "name": "text",
         "type": "string",
-        "required": false
+        "required": false,
+        "description": "Literal plain-text body. Newlines and repeated spaces are preserved; Markdown is not rendered."
       },
       {
         "name": "attachments",
         "type": "array",
-        "required": false
+        "required": false,
+        "description": "Base64 file bytes or an existing attachment_id from the same authorized mailbox. Omit to preserve attachments from source_draft_id (send) or draft_id (save/schedule); [] clears; an array replaces the complete set. Storage limits: 20 files, 10 MiB each, 25 MiB decoded total. Provider message limits include encoding/overhead: Cloudflare 5 MiB, Resend 40 MB. Reject empty files, unsafe filenames, malformed base64, duplicate references and Content-IDs. Base64 adds about one third in transport size; reverse proxy limits also apply. Local paths and URLs are not accepted."
       },
       {
         "name": "in_reply_to",
@@ -623,6 +621,11 @@ export const operationSchemas = {
       },
       {
         "name": "source_draft_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "client_send_id",
         "type": "string",
         "required": false
       }
@@ -637,17 +640,17 @@ export const operationSchemas = {
     "body": [
       {
         "name": "to",
-        "type": "string",
+        "type": "json",
         "required": false
       },
       {
         "name": "cc",
-        "type": "string",
+        "type": "json",
         "required": false
       },
       {
         "name": "bcc",
-        "type": "string",
+        "type": "json",
         "required": false
       },
       {
@@ -659,7 +662,23 @@ export const operationSchemas = {
         "name": "body",
         "type": "string",
         "required": true,
-        "description": "Draft body (HTML or plain text)"
+        "description": "Body bytes stored without rewriting. Use body_format=text for literal whitespace or body_format=html for rich email markup. Markdown is not rendered automatically."
+      },
+      {
+        "name": "body_format",
+        "type": "string",
+        "required": false,
+        "description": "How the body must be delivered and rendered. \"text\" preserves literal whitespace and does not interpret Markdown; \"html\" enables rich formatting subject to email sanitization.",
+        "values": [
+          "html",
+          "text"
+        ]
+      },
+      {
+        "name": "attachments",
+        "type": "array",
+        "required": false,
+        "description": "Base64 file bytes or an existing attachment_id from the same authorized mailbox. Omit to preserve attachments from source_draft_id (send) or draft_id (save/schedule); [] clears; an array replaces the complete set. Storage limits: 20 files, 10 MiB each, 25 MiB decoded total. Provider message limits include encoding/overhead: Cloudflare 5 MiB, Resend 40 MB. Reject empty files, unsafe filenames, malformed base64, duplicate references and Content-IDs. Base64 adds about one third in transport size; reverse proxy limits also apply. Local paths and URLs are not accepted."
       },
       {
         "name": "in_reply_to",
@@ -674,8 +693,7 @@ export const operationSchemas = {
       {
         "name": "draft_id",
         "type": "string",
-        "required": false,
-        "description": "Existing draft id to replace"
+        "required": false
       }
     ]
   },
@@ -706,48 +724,12 @@ export const operationSchemas = {
       {
         "name": "to",
         "type": "json",
-        "required": false
-      },
-      {
-        "name": "cc",
-        "type": "json",
-        "required": false
-      },
-      {
-        "name": "bcc",
-        "type": "json",
-        "required": false
-      },
-      {
-        "name": "subject",
-        "type": "string",
-        "required": false
-      },
-      {
-        "name": "body",
-        "type": "string",
         "required": true
-      },
-      {
-        "name": "in_reply_to",
-        "type": "string",
-        "required": false
-      },
-      {
-        "name": "thread_id",
-        "type": "string",
-        "required": false
-      },
-      {
-        "name": "draft_id",
-        "type": "string",
-        "required": false
       },
       {
         "name": "scheduled_send_at",
         "type": "string",
-        "required": true,
-        "description": "Must be in the future (ISO-8601)"
+        "required": true
       }
     ]
   },
@@ -796,86 +778,43 @@ export const operationSchemas = {
       {
         "name": "query",
         "type": "string",
-        "required": false,
-        "description": "Free-text query across subject, body, sender, recipients"
-      },
-      {
-        "name": "folder",
-        "type": "string",
-        "required": false,
-        "description": "Folder id filter"
+        "required": false
       },
       {
         "name": "from",
         "type": "string",
-        "required": false,
-        "description": "Sender contains"
+        "required": false
       },
       {
         "name": "to",
         "type": "string",
-        "required": false,
-        "description": "Recipient contains"
+        "required": false
       },
       {
         "name": "subject",
         "type": "string",
-        "required": false,
-        "description": "Subject contains"
+        "required": false
       },
       {
         "name": "date_start",
         "type": "string",
-        "required": false,
-        "description": "ISO start date"
+        "required": false
       },
       {
         "name": "date_end",
         "type": "string",
-        "required": false,
-        "description": "ISO end date"
+        "required": false
       },
       {
-        "name": "is_read",
+        "name": "folder",
         "type": "string",
-        "required": false,
-        "description": "true/1 for read only"
-      },
-      {
-        "name": "is_starred",
-        "type": "string",
-        "required": false,
-        "description": "true/1 for starred only"
-      },
-      {
-        "name": "category",
-        "type": "string",
-        "required": false,
-        "description": "Category filter"
-      },
-      {
-        "name": "has_attachment",
-        "type": "string",
-        "required": false,
-        "description": "Truthy to require attachments"
-      },
-      {
-        "name": "metadata_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true to omit body, snippet, raw headers, and threat URLs from candidates"
-      },
-      {
-        "name": "include_held",
-        "type": "boolean",
-        "required": false,
-        "description": "Set to true only for a scoped verification flow that must inspect messages temporarily held for auto-draft processing"
+        "required": false
       },
       {
         "name": "require_scan_status",
         "type": "string",
         "required": false,
-        "description": "Require an exact scan status such as `clean`; non-matching messages are excluded",
+        "description": "Require an exact stored scan status. Prefer clean before reading verification content.",
         "values": [
           "clean",
           "flagged",
@@ -883,22 +822,27 @@ export const operationSchemas = {
         ]
       },
       {
+        "name": "include_held",
+        "type": "boolean",
+        "required": false,
+        "description": "Include mail held by auto-draft. Use only for the active verification flow."
+      },
+      {
+        "name": "metadata_only",
+        "type": "boolean",
+        "required": false,
+        "description": "Omit body, snippet, raw headers, and threat URLs while correlating candidates."
+      },
+      {
         "name": "agent_safe_content",
         "type": "boolean",
         "required": false,
-        "description": "Set to true to omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics, and to normalize untrusted text fields to bounded plain text. The response retains `attachment_count` and remains untrusted."
-      },
-      {
-        "name": "page",
-        "type": "integer",
-        "required": false,
-        "description": "page"
+        "description": "Omit raw headers, provider metadata, threat details, attachment metadata, and storage diagnostics; normalize untrusted text fields to bounded plain text."
       },
       {
         "name": "limit",
         "type": "integer",
-        "required": false,
-        "description": "limit"
+        "required": false
       }
     ],
     "body": []

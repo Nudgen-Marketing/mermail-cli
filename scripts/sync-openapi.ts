@@ -2,12 +2,27 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { operations } from "../src/operations.js";
 
 const source = process.env.OPENAPI_SOURCE ?? "https://console.mermail.app/docs/openapi.json";
+const checkedInSpec = JSON.parse(await readFile("spec/openapi.json", "utf8"));
 const spec = source.startsWith("http")
   ? await fetch(source).then((response) => {
       if (!response.ok) throw new Error(`OpenAPI returned HTTP ${response.status}`);
       return response.json();
     })
   : JSON.parse(await readFile(source, "utf8"));
+
+const componentKinds = new Set([
+  ...Object.keys(checkedInSpec.components ?? {}),
+  ...Object.keys(spec.components ?? {}),
+]);
+spec.components = Object.fromEntries(
+  [...componentKinds].map((kind) => [
+    kind,
+    {
+      ...(checkedInSpec.components?.[kind] ?? {}),
+      ...(spec.components?.[kind] ?? {}),
+    },
+  ]),
+);
 
 type Field = { name: string; type: string; required: boolean; description?: string; values?: unknown[] };
 const generated: Record<string, { query: Field[]; body: Field[] }> = {};
@@ -31,8 +46,31 @@ function fields(schema: any): Field[] {
   });
 }
 
+function validateLocalRefs(value: unknown, location = "openapi") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => validateLocalRefs(entry, `${location}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "$ref" && typeof entry === "string" && entry.startsWith("#/")) {
+      const target = entry.slice(2).split("/").reduce(
+        (current: any, part) => current?.[part.replaceAll("~1", "/").replaceAll("~0", "~")],
+        spec,
+      );
+      if (target === undefined) throw new Error(`OpenAPI has a broken reference at ${location}: ${entry}`);
+    }
+    validateLocalRefs(entry, `${location}.${key}`);
+  }
+}
+
 for (const operation of operations) {
-  const pathItem = spec.paths?.[operation.path];
+  const currentPathItem = spec.paths?.[operation.path];
+  const preservedPathItem = checkedInSpec.paths?.[operation.path];
+  const pathItem = currentPathItem || preservedPathItem
+    ? { ...(preservedPathItem ?? {}), ...(currentPathItem ?? {}) }
+    : undefined;
+  if (pathItem) spec.paths[operation.path] = pathItem;
   const api = pathItem?.[operation.method.toLowerCase()];
   if (!api) throw new Error(`OpenAPI drift: ${operation.method} ${operation.path} (${operation.tool}) is missing`);
   const parameters = [...(pathItem.parameters ?? []), ...(api.parameters ?? [])].map((entry: any) => resolve(entry));
@@ -47,6 +85,8 @@ for (const operation of operations) {
     body: fields(api.requestBody?.content?.["application/json"]?.schema)
   };
 }
+
+validateLocalRefs(spec);
 
 await mkdir("spec", { recursive: true });
 await writeFile("spec/openapi.json", `${JSON.stringify(spec, null, 2)}\n`);
